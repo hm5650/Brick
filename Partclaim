@@ -21,8 +21,7 @@ local function cleanUpForces(part)
             child:IsA("BodyPosition") or 
             child:IsA("BodyThrust") or 
             child:IsA("BodyVelocity") or 
-            child:IsA("RocketPropulsion") or 
-            child:IsA("Attachment") or 
+            child:IsA("RocketPropulsion") or  
             child:IsA("AlignPosition") or 
             child:IsA("AlignOrientation") or 
             child:IsA("LinearVelocity") or 
