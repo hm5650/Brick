@@ -1,0 +1,182 @@
+local player = game.Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+-- Physics Settings
+local GRAVITY_MULTIPLIER = 0
+local INITIAL_BOOST = 10 -- Gentle push to start
+local MAX_SPEED = 20 -- Maximum upward speed
+local SIMULATION_RADIUS = 100 -- Large area of effect
+
+-- System Variables
+local invertedParts = {}
+local connection = nil
+local heartbeatConnection = nil
+
+local function cleanUpForces(part)
+    for _, child in ipairs(part:GetChildren()) do
+        if child:IsA("BodyForce") or
+            child:IsA("BodyForce") or 
+            child:IsA("BodyGyro") or 
+            child:IsA("BodyPosition") or 
+            child:IsA("BodyThrust") or 
+            child:IsA("BodyVelocity") or 
+            child:IsA("RocketPropulsion") or 
+            child:IsA("Attachment") or 
+            child:IsA("AlignPosition") or 
+            child:IsA("AlignOrientation") or 
+            child:IsA("LinearVelocity") or 
+            child:IsA("Torque") or 
+            child:IsA("BodyCenterOfMass") or 
+            child:IsA("BodyMover") or 
+            child:IsA("BodyMover2") or 
+            child:IsA("BallSocketConstraint") or 
+            child:IsA("WeldConstraint") or
+            child:IsA("RodConstraint") or 
+            child:IsA("SpringConstraint") or 
+            child:IsA("Motor6D") or
+            child:IsA("VectorForce") or
+            child:IsA("LineForce") or
+            child:IsA("HingeConstraint") or
+            child:IsA("CylindricalConstraint") or
+            child:IsA("PrismaticConstraint") or 
+            child:IsA("PlaneConstraint") or 
+            child:IsA("SlidingBallConstraint") then
+            child:Destroy()
+        end
+    end
+end
+
+local function applyUpwardForce()
+    -- Ensure we can affect distant parts
+    sethiddenproperty(player, "SimulationRadius", SIMULATION_RADIUS)
+    sethiddenproperty(player, "MaxSimulationRadius", SIMULATION_RADIUS)
+    
+    for part, data in pairs(invertedParts) do
+        if part and part.Parent then
+            -- Calculate upward force based on part's mass
+            local force = part:GetMass() * Workspace.Gravity * GRAVITY_MULTIPLIER
+            
+            -- Apply force while respecting max speed
+            if part.Velocity.Y < MAX_SPEED then
+                part:ApplyImpulse(Vector3.new(0, force * 0.016, 0)) -- 0.016 ≈ 1/60 for frame independence
+            end
+            
+            -- Ensure parts don't get stuck
+            if part.Velocity.Y < 5 then
+                part.Velocity = Vector3.new(0, 5, 0)
+            end
+        else
+            invertedParts[part] = nil
+        end
+    end
+end
+
+local function invertGravity(part)
+    if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
+        if not invertedParts[part] then
+            -- Store original state
+            invertedParts[part] = {
+                CanCollide = part.CanCollide,
+                CustomPhysicalProperties = part.CustomPhysicalProperties
+            }
+            
+            -- Clean existing forces
+            cleanUpForces(part)
+            
+            -- Configure part physics
+            part.CanCollide = false
+            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+            
+            -- Initial gentle push
+            part.Velocity = Vector3.new(0, INITIAL_BOOST, 0)
+            
+            -- Add permanent upward force
+            local bodyForce = Instance.new("BodyForce")
+            bodyForce.Force = Vector3.new(0, part:GetMass() * Workspace.Gravity * GRAVITY_MULTIPLIER, 0)
+            bodyForce.Parent = part
+            invertedParts[part].bodyForce = bodyForce
+        end
+    end
+end
+
+local function restoreGravity(part)
+    if invertedParts[part] then
+        cleanUpForces(part)
+        part.CanCollide = invertedParts[part].CanCollide
+        part.CustomPhysicalProperties = invertedParts[part].CustomPhysicalProperties
+        part.Velocity = Vector3.new(0, 0, 0)
+        invertedParts[part] = nil
+    end
+end
+
+function GravOn()
+    -- Set physics range
+    sethiddenproperty(player, "SimulationRadius", SIMULATION_RADIUS)
+    
+    -- Process existing parts
+    for _, part in ipairs(Workspace:GetDescendants()) do
+        invertGravity(part)
+    end
+    
+    -- Continuous force application
+    if heartbeatConnection then heartbeatConnection:Disconnect() end
+    heartbeatConnection = RunService.Heartbeat:Connect(applyUpwardForce)
+    
+    -- Detect new parts
+    if connection then connection:Disconnect() end
+    connection = Workspace.DescendantAdded:Connect(invertGravity)
+end
+
+function GravOff()
+    -- Clean up
+    if heartbeatConnection then
+        heartbeatConnection:Disconnect()
+        heartbeatConnection = nil
+    end
+    
+    for part in pairs(invertedParts) do
+        if part.Parent then
+            restoreGravity(part)
+        end
+    end
+    
+    invertedParts = {}
+    if connection then
+        connection:Disconnect()
+        connection = nil
+    end
+end
+
+-- Network Ownership
+local function SetupNetwork()
+    settings().Physics.AllowSleep = false
+    settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.Disabled
+    
+    if not getgenv().NetworkBypass then
+        getgenv().NetworkBypass = true
+        local old
+        old = hookmetamethod(game, "__index", newcclosure(function(self, idx)
+            if idx == "NetworkOwnershipRule" then
+                return Enum.NetworkOwnership.Manual
+            end
+            return old(self, idx)
+        end))
+    end
+end
+
+local function fu()
+GravOn()
+task.wait(0.01)
+GravOff()
+end
+fu()
+
+player.CharacterAdded:Connect(function(char)
+	fu()
+end)
+
+while true do
+    fu()
+    task.wait(25)
+end
