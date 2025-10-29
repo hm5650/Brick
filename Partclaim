@@ -27,14 +27,6 @@ local function cleanUpForces(part)
             child:IsA("AlignOrientation") or 
             child:IsA("LinearVelocity") or 
             child:IsA("Torque") or 
-            child:IsA("BodyCenterOfMass") or 
-            child:IsA("BodyMover") or 
-            child:IsA("BodyMover2") or 
-            child:IsA("BallSocketConstraint") or 
-            child:IsA("WeldConstraint") or
-            child:IsA("RodConstraint") or 
-            child:IsA("SpringConstraint") or 
-            child:IsA("Motor6D") or
             child:IsA("VectorForce") or
             child:IsA("LineForce") or
             child:IsA("HingeConstraint") or
@@ -167,7 +159,7 @@ end
 
 local function fu()
 GravOn()
-task.wait(0.01)
+task.wait(0.1)
 GravOff()
 end
 fu()
