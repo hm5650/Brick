@@ -166,8 +166,3 @@ fu()
 player.CharacterAdded:Connect(function(char)
 	fu()
 end)
-
-while true do
-    fu()
-    task.wait(25)
-end
