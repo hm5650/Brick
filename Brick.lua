@@ -3007,9 +3007,9 @@ local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
 end
 
 Window:Notify({
-    Title = "brick",
-    Desc = "DID I GET YOU WITH THAT FAKE CRASH MWHAHAH",
-    Time = 4
+    Title = "script made by @hmmm5650",
+    Desc = "Enter Text... (ಠ⁠ ͜⁠ʖ⁠ ⁠ಠ)",
+    Time = 5
 })
 
 -- fin
