@@ -87,8 +87,8 @@ local config = {
 }
 
 local modes = {
-    "Vertical Ring",
-    "Horizontal Ring", 
+    "Vertical PartOrbit",
+    "Horizontal PartOrbit", 
     "Vertical & Horizontal",
     "Left Tilt",
     "Right Tilt",
