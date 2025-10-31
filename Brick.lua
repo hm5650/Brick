@@ -1,5 +1,3 @@
--- ik it's poorly coded.. wait what are u doing here?!
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -8,6 +6,43 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
+
+local btnClickSound = Instance.new("Sound")
+btnClickSound.SoundId = "rbxassetid://12221967"
+btnClickSound.Volume = 0.5
+btnClickSound.Parent = SoundService
+
+local sliderSound = Instance.new("Sound")
+sliderSound.SoundId = "rbxassetid://12221976"
+sliderSound.Volume = 0.3
+sliderSound.Parent = SoundService
+
+local dropdownSound = Instance.new("Sound")
+dropdownSound.SoundId = "rbxassetid://12221831"
+dropdownSound.Volume = 0.4
+dropdownSound.Parent = SoundService
+
+local toggleSound = Instance.new("Sound")
+toggleSound.SoundId = "rbxassetid://12221976"
+toggleSound.Volume = 0.4
+toggleSound.Parent = SoundService
+
+local function btnclick()
+    btnClickSound:Play()
+end
+
+local function slidersound()
+    sliderSound:Play()
+end
+
+local function dropdownsound()
+    dropdownSound:Play()
+end
+
+local function togglesound()
+    toggleSound:Play()
+end
 
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/x2zu/OPEN-SOURCE-UI-ROBLOX/refs/heads/main/X2ZU%20UI%20ROBLOX%20OPEN%20SOURCE/DummyUi-leak-by-x2zu/fetching-main/Tools/Framework.luau"))()
 -- Create Main Window
@@ -33,7 +68,7 @@ local claimedParts = {}
 local connection = nil
 local heartbeatConnection = nil
 local lastCleanupTime = 0
-local cleanupInterval = 5 -- seconds
+local cleanupInterval = 5
 local maxParts = math.huge
 local partCheckCooldown = {}
 local startt = false
@@ -356,6 +391,7 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Rounding = 0,
         Value = 16,
         Callback = function(val)
+            slidersound()
             local character = LocalPlayer.Character
             if character and character:FindFirstChildOfClass("Humanoid") then
                 character:FindFirstChildOfClass("Humanoid").WalkSpeed = val
@@ -372,6 +408,7 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
+            slidersound()
             local character = LocalPlayer.Character
             if character and character:FindFirstChildOfClass("Humanoid") then
                 character:FindFirstChildOfClass("Humanoid").JumpPower = val
@@ -383,6 +420,7 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Title = "Reset",
         Desc = "Reset walkspeed and jumppower to default",
         Callback = function()
+            btnclick()
             local character = LocalPlayer.Character
             if character and character:FindFirstChildOfClass("Humanoid") then
                 local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -400,6 +438,7 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Desc = "Walk through walls",
         Value = false,
         Callback = function(v)
+            togglesound()
             noclipEnabled = v
             local character = LocalPlayer.Character
             
@@ -446,6 +485,7 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Title = "Fly",
         Desc = "Opens the flygui",
         Callback = function()
+            btnclick()
             fly()
         end
     })
@@ -457,6 +497,7 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Desc = "Jump infinitely in the air",
         Value = false,
         Callback = function(v)
+            togglesound()
             infJumpEnabled = v
             
             if v then
@@ -1671,7 +1712,6 @@ local Workspace = game:GetService("Workspace")
 local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
--- Create the invisible part for attachments
 local Folder = Instance.new("Folder", Workspace)
 local Part = Instance.new("Part", Folder)
 local Attachment1 = Instance.new("Attachment", Part)
@@ -1679,17 +1719,13 @@ Part.Anchored = true
 Part.CanCollide = false
 Part.Transparency = 1
 
--- GUI Implementation
 local G2L = {}
 
--- Create ScreenGui
 G2L["ScreenGui_1"] = Instance.new("ScreenGui", game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"))
 G2L["ScreenGui_1"]["ZIndexBehavior"] = Enum.ZIndexBehavior.Sibling
 
--- Tags
 CollectionService:AddTag(G2L["ScreenGui_1"], "main")
 
--- Main Frame
 G2L["Frame_2"] = Instance.new("Frame", G2L["ScreenGui_1"])
 G2L["Frame_2"]["BorderSizePixel"] = 0
 G2L["Frame_2"]["BackgroundColor3"] = Color3.fromRGB(41, 41, 41)
@@ -1697,7 +1733,6 @@ G2L["Frame_2"]["Size"] = UDim2.new(0, 130, 0, 148)
 G2L["Frame_2"]["Position"] = UDim2.new(0, 310, 0, 60)
 G2L["Frame_2"]["BackgroundTransparency"] = 0.2
 
--- Radius TextBox
 G2L["RaidusTextBox_3"] = Instance.new("TextBox", G2L["Frame_2"])
 G2L["RaidusTextBox_3"]["CursorPosition"] = -1
 G2L["RaidusTextBox_3"]["Name"] = "RaidusTextBox"
@@ -1709,23 +1744,18 @@ G2L["RaidusTextBox_3"]["Size"] = UDim2.new(0, 100, 0, 20)
 G2L["RaidusTextBox_3"]["Position"] = UDim2.new(0, 16, 0, 62)
 G2L["RaidusTextBox_3"]["Text"] = "70"
 
--- Radius TextBox Corner
 G2L["UICorner_4"] = Instance.new("UICorner", G2L["RaidusTextBox_3"])
 
--- Main Frame Corner
 G2L["UICorner_5"] = Instance.new("UICorner", G2L["Frame_2"])
 
--- Frame for minimize button
 G2L["Frame2_6"] = Instance.new("Frame", G2L["Frame_2"])
 G2L["Frame2_6"]["BorderSizePixel"] = 0
 G2L["Frame2_6"]["BackgroundColor3"] = Color3.fromRGB(41, 41, 41)
 G2L["Frame2_6"]["Size"] = UDim2.new(0, 130, 0, 20)
 G2L["Frame2_6"]["Name"] = "Frame2"
 
--- Frame2 Corner
 G2L["UICorner_7"] = Instance.new("UICorner", G2L["Frame2_6"])
 
--- Minimize Button
 G2L["MinimiseBtn_8"] = Instance.new("TextButton", G2L["Frame2_6"])
 G2L["MinimiseBtn_8"]["BorderSizePixel"] = 0
 G2L["MinimiseBtn_8"]["TextSize"] = 11
@@ -1736,7 +1766,6 @@ G2L["MinimiseBtn_8"]["Text"] = "➖"
 G2L["MinimiseBtn_8"]["Name"] = "MinimiseBtn"
 G2L["MinimiseBtn_8"]["Position"] = UDim2.new(0, 98, 0, 0)
 
--- Attraction Strength TextBox
 G2L["ASTextBox_9"] = Instance.new("TextBox", G2L["Frame_2"])
 G2L["ASTextBox_9"]["CursorPosition"] = -1
 G2L["ASTextBox_9"]["Name"] = "ASTextBox"
@@ -1748,10 +1777,8 @@ G2L["ASTextBox_9"]["Size"] = UDim2.new(0, 100, 0, 20)
 G2L["ASTextBox_9"]["Position"] = UDim2.new(0, 16, 0, 86)
 G2L["ASTextBox_9"]["Text"] = "555"
 
--- AS TextBox Corner
 G2L["UICorner_a"] = Instance.new("UICorner", G2L["ASTextBox_9"])
 
--- Toggle Button
 G2L["Toggle_b"] = Instance.new("TextButton", G2L["Frame_2"])
 G2L["Toggle_b"]["BorderSizePixel"] = 0
 G2L["Toggle_b"]["TextColor3"] = Color3.fromRGB(255, 255, 255)
@@ -1761,10 +1788,8 @@ G2L["Toggle_b"]["Text"] = "PartOrbit: OFF"
 G2L["Toggle_b"]["Name"] = "Toggle"
 G2L["Toggle_b"]["Position"] = UDim2.new(0, 14, 0, 30)
 
--- Toggle Button Corner
 G2L["UICorner_c"] = Instance.new("UICorner", G2L["Toggle_b"])
 
--- Title
 G2L["Title_d"] = Instance.new("TextLabel", G2L["Frame_2"])
 G2L["Title_d"]["BorderSizePixel"] = 0
 G2L["Title_d"]["BackgroundColor3"] = Color3.fromRGB(255, 255, 255)
@@ -1775,20 +1800,17 @@ G2L["Title_d"]["Text"] = "PartOrbit"
 G2L["Title_d"]["Name"] = "Title"
 G2L["Title_d"]["Position"] = UDim2.new(0, 20, 0, 4)
 
--- UI Stroke
 G2L["UIStroke_e"] = Instance.new("UIStroke", G2L["Frame_2"])
 G2L["UIStroke_e"]["Transparency"] = 0.1
 G2L["UIStroke_e"]["Thickness"] = 3
 G2L["UIStroke_e"]["Color"] = Color3.fromRGB(41, 41, 41)
 
--- SuperRing functionality
 local radius = tonumber(G2L["RaidusTextBox_3"].Text) or 70
 local height = 100
 local rotationSpeed = 0.5
 local attractionStrength = tonumber(G2L["ASTextBox_9"].Text) or 555
 local ringPartsEnabled = false
 
--- Network part control
 if not getgenv().Network then
     getgenv().Network = {
         BaseParts = {},
@@ -1908,13 +1930,11 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Button functionality
 G2L["Toggle_b"].MouseButton1Click:Connect(function()
     ringPartsEnabled = not ringPartsEnabled
     G2L["Toggle_b"].Text = ringPartsEnabled and "PartOrbit: ON" or "PartOrbit: OFF"
 end)
 
--- Update radius when text changes
 G2L["RaidusTextBox_3"].FocusLost:Connect(function(enterPressed)
     if enterPressed then
         local newRadius = tonumber(G2L["RaidusTextBox_3"].Text)
@@ -1927,7 +1947,6 @@ G2L["RaidusTextBox_3"].FocusLost:Connect(function(enterPressed)
     end
 end)
 
--- Update attraction strength when text changes
 G2L["ASTextBox_9"].FocusLost:Connect(function(enterPressed)
     if enterPressed then
         local newStrength = tonumber(G2L["ASTextBox_9"].Text)
@@ -1940,7 +1959,6 @@ G2L["ASTextBox_9"].FocusLost:Connect(function(enterPressed)
     end
 end)
 
--- Make GUI draggable
 local dragging
 local dragInput
 local dragStart
@@ -1977,7 +1995,6 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Minimize functionality
 local minimized = false
 G2L["MinimiseBtn_8"].MouseButton1Click:Connect(function()
     minimized = not minimized
@@ -2015,6 +2032,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         Title = "Toggle PartOrbit",
         Desc = "Cool stuff",
         Callback = function()
+            btnclick()
             pcz()
             orbite()
         end
@@ -2026,6 +2044,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         List = modes,
         Value = "Horizontal Ring",
         Callback = function(mode)
+            dropdownsound()
             currentMode = table.find(modes, mode)
         end
     })
@@ -2038,6 +2057,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
+            slidersound()
             radius = val
         end
     })
@@ -2050,6 +2070,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         Rounding = 0,
         Value = 2,
         Callback = function(val)
+            slidersound()
             speed = val
         end
     })
@@ -2059,6 +2080,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         Title = "Toggle PartOrbit",
         Desc = "lesser calculation = lesser lag",
         Callback = function()
+            btnclick()
             pcz()
             toggleorbit()
         end
@@ -2070,6 +2092,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         List = GetPlayerList(),
         Value = "me",
         Callback = function(selectedPlayer)
+            slidersound()
             UpdateTargetPlayer(selectedPlayer)
         end
     })
@@ -2081,6 +2104,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
+            slidersound()
             farness = val
         end
     })
@@ -2093,6 +2117,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         Rounding = 0,
         Value = 555,
         Callback = function(val)
+            slidersound()
             fast = val
         end
     })
@@ -2104,6 +2129,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         Rounding = 0,
         Value = 1,
         Callback = function(val)
+            slidersound()
             height = val
         end
     })
@@ -2112,6 +2138,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         Title = "Toggle Tornado",
         Desc = "tornado? :0",
         Callback = function()
+            btnclick()
             tt()
         end
     })
@@ -2120,6 +2147,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
         Title = "PartOrbit gui",
         Desc = "woah :o",
         Callback = function()
+            btnclick()
             rpp()
         end
     })
@@ -2656,6 +2684,7 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "moon"}) do
         List = GetPlayerList(),
         Value = "me",
         Callback = function(selectedPlayer)
+            dropdownsound()
             getgenv().BlackHoleTarget = selectedPlayer
         end
     })
@@ -2664,6 +2693,7 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "moon"}) do
         Title = "Toggle Black Hole",
         Desc = "Cool thing idk",
         Callback = function()
+            btnclick()
             toggleBlackHole()
         end
     })
@@ -2777,6 +2807,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Title = "Telekinesis Tool",
         Desc = "tlelele",
         Callback = function()
+            btnclick()
             pmg()
         end
     })
@@ -2785,6 +2816,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Title = "Part Attach Tool",
         Desc = "wled",
         Callback = function()
+            btnclick()
             pmg3()
             pcz()
         end
@@ -2795,6 +2827,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Desc = "fling em all!",  
         Value = false,  
         Callback = function(v)  
+            togglesound()
             if v then
                 pcz()
                 lol()
@@ -2809,6 +2842,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Desc = "omg floating parts",  
         Value = false,  
         Callback = function(v)  
+            togglesound()
             if v then
                 GravOn()
                 pcz()
@@ -2823,6 +2857,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Desc = "my wig D:",  
         Value = false,  
         Callback = function(v)  
+            togglesound()
             if v then
                 WindOn()
                 pcz()
@@ -2859,6 +2894,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Desc = "Attract or repel parts or smth",
         Value = false,
         Callback = function(v)
+            togglesound()
             startt = v
             if v then
                 magnetConnection = RunService.Heartbeat:Connect(function()
@@ -2917,6 +2953,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         List = {"Pull", "Push"},
         Value = "Pull",
         Callback = function(mode)
+            dropdownsound()
             magnetMode = mode
         end
     })
@@ -2929,6 +2966,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Rounding = 0,
         Value = 100,
         Callback = function(val)
+            slidersound()
             magnetStrength = val
         end
     })
@@ -2941,6 +2979,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
+            slidersound()
             magnetRadius = val
         end
     })
@@ -2952,6 +2991,7 @@ local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
         Title = "Partclaim",
         Desc = "use when partclaim is acting up or idk",
         Callback = function()
+            btnclick()
             pcz()
         end
     })
@@ -2960,14 +3000,15 @@ local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
         Title = "Anti Unachored Fling",
         Desc = nil,
         Callback = function()
+            btnclick()
             wha()
         end
     })
 end
 
 Window:Notify({
-    Title = "Brick",
-    Desc = "made by me, I mean @hmmm5650",
+    Title = "brick",
+    Desc = "DID I GET YOU WITH THAT FAKE CRASH MWHAHAH",
     Time = 4
 })
 
