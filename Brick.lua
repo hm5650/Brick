@@ -129,12 +129,10 @@ local function cleanUpForces(part)
 end
 
 local function claimPart(part)
-    -- Check if we've reached the part limit
     if GetClaimedPartsCount() >= maxParts then
         return
     end
-    
-    -- Cooldown check to prevent rapid re-claiming
+
     local partId = part:GetFullName()
     local currentTime = tick()
     if partCheckCooldown[partId] and currentTime - partCheckCooldown[partId] < 1 then
@@ -144,7 +142,6 @@ local function claimPart(part)
     
     if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
         if not claimedParts[part] then
-            -- Store original state
             claimedParts[part] = {
                 CanCollide = part.CanCollide,
                 CustomPhysicalProperties = part.CustomPhysicalProperties,
@@ -152,33 +149,27 @@ local function claimPart(part)
                 AssemblyAngularVelocity = part.AssemblyAngularVelocity
             }
             
-            -- Clean existing forces
             cleanUpForces(part)
             
-            -- Make part lightweight and non-collidable for easier control
             part.CanCollide = false
             part.CustomPhysicalProperties = PhysicalProperties.new(0.1, 0.1, 0.1, 0.1, 0.1)
             
-            -- Set network ownership to player for client-side control
             local success = pcall(function()
                 part:SetNetworkOwner(player)
             end)
             
             if not success then
-                -- Alternative method using network ownership
                 pcall(function()
                     part:SetNetworkOwnershipAuto()
                 end)
             end
             
-            -- Mark as claimed
             claimedParts[part].claimed = true
         end
     end
 end
 
 local function maintainOwnership()
-    -- Only set simulation radius occasionally to reduce lag
     if tick() - lastCleanupTime > cleanupInterval then
         pcall(function()
             sethiddenproperty(game.Players.LocalPlayer, "SimulationRadius", 100)
@@ -186,7 +177,6 @@ local function maintainOwnership()
         lastCleanupTime = tick()
     end
     
-    -- Process in smaller batches to reduce frame spikes
     local processed = 0
     local maxPerFrame = 20
     
@@ -196,14 +186,12 @@ local function maintainOwnership()
         end
         
         if part and part.Parent then
-            -- Maintain network ownership (only if needed)
             local success = pcall(function()
                 if part:GetNetworkOwner() ~= player then
                     part:SetNetworkOwner(player)
                 end
             end)
             
-            -- Keep parts lightweight
             if part.CanCollide then
                 part.CanCollide = false
             end
@@ -219,11 +207,9 @@ local function unclaimPart(part)
     if claimedParts[part] then
         cleanUpForces(part)
         
-        -- Restore original properties
         part.CanCollide = claimedParts[part].CanCollide
         part.CustomPhysicalProperties = claimedParts[part].CustomPhysicalProperties
         
-        -- Release network ownership
         pcall(function()
             part:SetNetworkOwner(nil)
         end)
@@ -232,47 +218,39 @@ local function unclaimPart(part)
     end
 end
 
-function ClaimOn()
-    -- Set physics range
+function pcz()
     pcall(function()
         sethiddenproperty(player, "SimulationRadius", 900)
     end)
-    
-    -- Process existing parts with throttling
+
     local startTime = tick()
     local partsProcessed = 0
     
     for _, part in ipairs(Workspace:GetDescendants()) do
-        if tick() - startTime > 0.016 then -- Don't spend more than one frame initializing
+        if tick() - startTime > 0.016 then
             break
         end
         
         claimPart(part)
         partsProcessed = partsProcessed + 1
         
-        -- Yield occasionally to prevent freezing
         if partsProcessed % 50 == 0 then
             RunService.Heartbeat:Wait()
         end
     end
     
-    -- Continuous ownership maintenance (throttled)
     if heartbeatConnection then heartbeatConnection:Disconnect() end
     heartbeatConnection = RunService.Heartbeat:Connect(maintainOwnership)
-    
-    -- Detect new parts
     if connection then connection:Disconnect() end
     connection = Workspace.DescendantAdded:Connect(claimPart)
 end
 
-function ClaimOff()
-    -- Clean up
+function pczz()
     if heartbeatConnection then
         heartbeatConnection:Disconnect()
         heartbeatConnection = nil
     end
-    
-    -- Release parts in batches to prevent lag spike
+
     local partsToRelease = {}
     for part in pairs(claimedParts) do
         table.insert(partsToRelease, part)
@@ -286,7 +264,7 @@ function ClaimOff()
                 unclaimPart(part)
             end
         end
-        RunService.Heartbeat:Wait() -- Yield between batches
+        RunService.Heartbeat:Wait()
     end
     
     claimedParts = {}
@@ -306,8 +284,6 @@ function CollectToPosition(position)
         if part and part.Parent then
             local direction = (position - part.Position).Unit
             local distance = (position - part.Position).Magnitude
-            
-            -- Apply force towards position
             local force = part:GetMass() * 50 * math.min(distance, 100)
             part:ApplyImpulse(direction * force * 0.016)
             
@@ -327,7 +303,7 @@ function GetClaimedPartsCount()
     return count
 end
 
-ClaimOn()
+pcz()
 
 local function fly()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/F/refs/heads/main/F", true))()
@@ -933,110 +909,7 @@ function GravOff()
     end
 end
 
-local function bhh()
-    local Players = game:GetService("Players")
-    local RunService = game:GetService("RunService")
-    local LocalPlayer = Players.LocalPlayer
-    local Workspace = game:GetService("Workspace")
 
-    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-
-    Folder = Instance.new("Folder", Workspace)
-    local Part = Instance.new("Part", Folder)
-    Attachment1 = Instance.new("Attachment", Part)
-    Part.Anchored = true
-    Part.CanCollide = false
-    Part.Transparency = 1
-
-    if not Network then
-        Network = {
-            BaseParts = {},
-            Velocity = Vector3.new(14.46262424, 14.46262424, 14.46262424)
-        }
-
-        Network.RetainPart = function(Part)
-            if typeof(Part) == "Instance" and Part:IsA("BasePart") and Part:IsDescendantOf(Workspace) then
-                table.insert(Network.BaseParts, Part)
-                Part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-                Part.CanCollide = false
-            end
-        end
-
-        local function EnablePartControl()
-            LocalPlayer.ReplicationFocus = Workspace
-            RunService.Heartbeat:Connect(function()
-                sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
-                for _, Part in pairs(Network.BaseParts) do
-                    if Part:IsDescendantOf(Workspace) then
-                        Part.Velocity = Network.Velocity
-                    end
-                end
-            end)
-        end
-
-        EnablePartControl()
-    end
-
-    local function ForcePart(v)
-        if v:IsA("Part") and not v.Anchored and not v.Parent:FindFirstChild("Humanoid") and not v.Parent:FindFirstChild("Head") and v.Name ~= "Handle" then
-            for _, x in next, v:GetChildren() do
-                if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or x:IsA("RocketPropulsion") then
-                    x:Destroy()
-                end
-            end
-            if v:FindFirstChild("Attachment") then
-                v:FindFirstChild("Attachment"):Destroy()
-            end
-            if v:FindFirstChild("AlignPosition") then
-                v:FindFirstChild("AlignPosition"):Destroy()
-            end
-            if v:FindFirstChild("Torque") then
-                v:FindFirstChild("Torque"):Destroy()
-            end
-            v.CanCollide = false
-            local Torque = Instance.new("Torque", v)
-            Torque.Torque = Vector3.new(100000, 100000, 100000)
-            local AlignPosition = Instance.new("AlignPosition", v)
-            local Attachment2 = Instance.new("Attachment", v)
-            Torque.Attachment0 = Attachment2
-            AlignPosition.MaxForce = 9999999999999999
-            AlignPosition.MaxVelocity = math.huge
-            AlignPosition.Responsiveness = 200
-            AlignPosition.Attachment0 = Attachment2
-            AlignPosition.Attachment1 = Attachment1
-        end
-    end
-
-    blackHoleActive = true
-
-    for _, v in next, Workspace:GetDescendants() do
-        ForcePart(v)
-    end
-
-    Workspace.DescendantAdded:Connect(function(v)
-        if blackHoleActive then
-            ForcePart(v)
-        end
-    end)
-
-    spawn(function()
-        while blackHoleActive and RunService.RenderStepped:Wait() do
-            Attachment1.WorldCFrame = humanoidRootPart.CFrame
-        end
-    end)
-end
-
-local function bhhh()
-    blackHoleActive = false
-    if Folder then
-        Folder:Destroy()
-        Folder = nil
-    end
-    if Network then
-        Network.BaseParts = {}
-    end
-end
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -2128,15 +2001,21 @@ end)
 end
 
 
-local Tab = Window:Tab({Title = "Orbit Mod", Icon = "star"}) do
+local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
     -- Section
     Tab:Section({Title = "Orbit Modification"})
+
+    Tab:Label({
+        Title = "Brick",
+        Desc = "you might get FPS drops which is Ur problem :D",
+    })
 
     -- Button
     Tab:Button({
         Title = "Toggle PartOrbit",
         Desc = "Cool stuff",
         Callback = function()
+            pcz()
             orbite()
         end
     })
@@ -2180,6 +2059,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "star"}) do
         Title = "Toggle PartOrbit",
         Desc = "lesser calculation = lesser lag",
         Callback = function()
+            pcz()
             toggleorbit()
         end
     })
@@ -2209,7 +2089,7 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "star"}) do
     Tab:Slider({
         Title = "Set Speed",
         Min = 0,
-        Max = 10000,
+        Max = 1000,
         Rounding = 0,
         Value = 555,
         Callback = function(val)
@@ -2611,21 +2491,287 @@ for i, v in pairs(cors) do
 end
 end
 
-local Tab = Window:Tab({Title = "Part Mod", Icon = "star"}) do
-    Tab:Section({Title = "Part Modifier"})
-
-    Tab:Toggle({  
-        Title = "Blackhole",  
-        Desc = "fling em",  
-        Value = false,  
-        Callback = function(v)  
-            if v then
-                bhh()
-            else
-                bhhh()
+local function bhh(targetPlayerName)
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local LocalPlayer = Players.LocalPlayer
+    local Workspace = game:GetService("Workspace")
+    local function GetPlayer(name)
+        if not name or name == "" then return LocalPlayer end
+        if string.lower(name) == "me" then return LocalPlayer end
+        
+        name = string.lower(name)
+        for _, plr in pairs(Players:GetPlayers()) do
+            if string.find(string.lower(plr.Name), name) or string.find(string.lower(plr.DisplayName), name) then
+                return plr
             end
-        end  
+        end
+        return LocalPlayer
+    end
+
+    local TargetPlayer = GetPlayer(targetPlayerName)
+    if not TargetPlayer then
+        TargetPlayer = LocalPlayer
+    end
+
+    local character = TargetPlayer.Character
+    if not character then
+        character = TargetPlayer.CharacterAdded:Wait()
+    end
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+    Folder = Instance.new("Folder", Workspace)
+    local Part = Instance.new("Part", Folder)
+    Attachment1 = Instance.new("Attachment", Part)
+    Part.Anchored = true
+    Part.CanCollide = false
+    Part.Transparency = 1
+
+    if not Network then
+        Network = {
+            BaseParts = {},
+            Velocity = Vector3.new(14.46262424, 14.46262424, 14.46262424)
+        }
+
+        Network.RetainPart = function(Part)
+            if typeof(Part) == "Instance" and Part:IsA("BasePart") and Part:IsDescendantOf(Workspace) then
+                table.insert(Network.BaseParts, Part)
+                Part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+                Part.CanCollide = false
+            end
+        end
+
+        local function EnablePartControl()
+            LocalPlayer.ReplicationFocus = Workspace
+            RunService.Heartbeat:Connect(function()
+                sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+                for _, Part in pairs(Network.BaseParts) do
+                    if Part:IsDescendantOf(Workspace) then
+                        Part.Velocity = Network.Velocity
+                    end
+                end
+            end)
+        end
+
+        EnablePartControl()
+    end
+
+    local function ForcePart(v)
+        if v:IsA("Part") and not v.Anchored and not v.Parent:FindFirstChild("Humanoid") and not v.Parent:FindFirstChild("Head") and v.Name ~= "Handle" then
+            for _, x in next, v:GetChildren() do
+                if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or x:IsA("RocketPropulsion") then
+                    x:Destroy()
+                end
+            end
+            if v:FindFirstChild("Attachment") then
+                v:FindFirstChild("Attachment"):Destroy()
+            end
+            if v:FindFirstChild("AlignPosition") then
+                v:FindFirstChild("AlignPosition"):Destroy()
+            end
+            if v:FindFirstChild("Torque") then
+                v:FindFirstChild("Torque"):Destroy()
+            end
+            v.CanCollide = false
+            local Torque = Instance.new("Torque", v)
+            Torque.Torque = Vector3.new(100000, 100000, 100000)
+            local AlignPosition = Instance.new("AlignPosition", v)
+            local Attachment2 = Instance.new("Attachment", v)
+            Torque.Attachment0 = Attachment2
+            AlignPosition.MaxForce = 9999999999999999
+            AlignPosition.MaxVelocity = math.huge
+            AlignPosition.Responsiveness = 200
+            AlignPosition.Attachment0 = Attachment2
+            AlignPosition.Attachment1 = Attachment1
+        end
+    end
+
+    blackHoleActive = true
+
+    for _, v in next, Workspace:GetDescendants() do
+        ForcePart(v)
+    end
+
+    Workspace.DescendantAdded:Connect(function(v)
+        if blackHoleActive then
+            ForcePart(v)
+        end
+    end)
+
+    spawn(function()
+        while blackHoleActive and RunService.RenderStepped:Wait() do
+            if character and humanoidRootPart and humanoidRootPart.Parent then
+                Attachment1.WorldCFrame = humanoidRootPart.CFrame
+            else
+                if TargetPlayer then
+                    character = TargetPlayer.Character
+                    if character then
+                        humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function bhhh()
+    blackHoleActive = false
+    if Folder then
+        Folder:Destroy()
+        Folder = nil
+    end
+    if Network then
+        Network.BaseParts = {}
+    end
+end
+local function GetPlayerList()
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local playerList = {"me"}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(playerList, player.Name)
+        end
+    end
+    return playerList
+end
+
+local blackHoleEnabled = false
+
+local function toggleBlackHole()
+    if blackHoleEnabled then
+        bhhh()
+        blackHoleEnabled = false
+    else
+        local target = getgenv().BlackHoleTarget or "me"
+        bhh(target)
+        blackHoleEnabled = true
+    end
+end
+
+local Tab = Window:Tab({Title = "Black Hole", Icon = "moon"}) do
+    Tab:Section({Title = "Black Hole Controls"})
+    Tab:Dropdown({
+        Title = "Select Target Player",
+        List = GetPlayerList(),
+        Value = "me",
+        Callback = function(selectedPlayer)
+            getgenv().BlackHoleTarget = selectedPlayer
+        end
     })
+
+    Tab:Button({
+        Title = "Toggle Black Hole",
+        Desc = "Cool thing idk",
+        Callback = function()
+            toggleBlackHole()
+        end
+    })
+
+    Tab:Label({
+        Title = "HEY",
+        Desc = "you might need to re-toggle when u select a player.",
+    })
+end
+
+local PartAttachTool = {
+    Tool = nil,
+    Welds = {},
+    Connection = nil
+}
+
+local function pmg3()
+    local player = game.Players.LocalPlayer
+    local backpack = player:FindFirstChild("Backpack")
+    
+    if not backpack then
+        crx("Backpack not found!", 1.1, Color3.fromRGB(255, 0, 0), 138081500)
+        return
+    end
+    
+    if PartAttachTool.Tool then
+        PartAttachTool.Tool:Destroy()
+        PartAttachTool.Tool = nil
+    end
+    
+    for _, weld in pairs(PartAttachTool.Welds) do
+        if weld then
+            weld:Destroy()
+        end
+    end
+    PartAttachTool.Welds = {}
+    
+    if PartAttachTool.Connection then
+        PartAttachTool.Connection:Disconnect()
+        PartAttachTool.Connection = nil
+    end
+    
+    local tool = Instance.new("Tool")
+    tool.Name = "PartAttachTool"
+    tool.ToolTip = "Click on unanchored parts to weld to this tool"
+    tool.RequiresHandle = true
+    tool.Parent = backpack
+    local handle = Instance.new("Part")
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(1, 1, 1)
+    handle.Transparency = 1
+    handle.CanCollide = false
+    handle.Parent = tool
+    local selectionBox = Instance.new("SelectionBox")
+    selectionBox.Name = "PartSelection"
+    selectionBox.Adornee = nil
+    selectionBox.Color3 = Color3.new(0, 1, 0)
+    selectionBox.LineThickness = 0.05
+    selectionBox.Parent = tool
+    
+    tool.Activated:Connect(function()
+        local mouse = player:GetMouse()
+        local targetPart = mouse.Target
+        
+        if targetPart and targetPart:IsA("BasePart") and not targetPart.Anchored then
+            if PartAttachTool.Welds[targetPart] then
+                PartAttachTool.Welds[targetPart]:Destroy()
+                PartAttachTool.Welds[targetPart] = nil
+            end
+
+            local weld = Instance.new("Weld")
+            weld.Name = "ToolAttachment"
+            weld.Part0 = handle
+            weld.Part1 = targetPart
+            weld.C0 = CFrame.new()
+            weld.C1 = handle.CFrame:ToObjectSpace(targetPart.CFrame)
+            weld.Parent = handle
+            
+            PartAttachTool.Welds[targetPart] = weld
+            
+            selectionBox.Adornee = targetPart
+        end
+    end)
+    
+    tool.Unequipped:Connect(function()
+        for part, weld in pairs(PartAttachTool.Welds) do
+            if weld then
+                weld:Destroy()
+            end
+        end
+        PartAttachTool.Welds = {}
+        selectionBox.Adornee = nil
+    end)
+    tool.Destroying:Connect(function()
+        for part, weld in pairs(PartAttachTool.Welds) do
+            if weld then
+                weld:Destroy()
+            end
+        end
+        PartAttachTool.Welds = {}
+        PartAttachTool.Tool = nil
+    end)
+    
+    PartAttachTool.Tool = tool
+end
+
+local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
+    Tab:Section({Title = "Part Modifier"})
 
     Tab:Button({
         Title = "Telekinesis Tool",
@@ -2635,12 +2781,22 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "star"}) do
         end
     })
 
+    Tab:Button({
+        Title = "Part Attach Tool",
+        Desc = "wled",
+        Callback = function()
+            pmg3()
+            pcz()
+        end
+    })
+
     Tab:Toggle({  
         Title = "Teleport Parts To Others",  
         Desc = "fling em all!",  
         Value = false,  
         Callback = function(v)  
             if v then
+                pcz()
                 lol()
             else
                 fjd()
@@ -2655,6 +2811,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "star"}) do
         Callback = function(v)  
             if v then
                 GravOn()
+                pcz()
             else
                 GravOff()
             end
@@ -2663,11 +2820,12 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "star"}) do
 
     Tab:Toggle({  
         Title = "Heavy Winds",  
-        Desc = "my wig",  
+        Desc = "my wig D:",  
         Value = false,  
         Callback = function(v)  
             if v then
                 WindOn()
+                pcz()
             else
                 WindOff()
             end
@@ -2698,7 +2856,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "star"}) do
 
     Tab:Toggle({
         Title = "Part Magnet",
-        Desc = "Attract or repel parts",
+        Desc = "Attract or repel parts or smth",
         Value = false,
         Callback = function(v)
             startt = v
@@ -2750,6 +2908,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "star"}) do
                 end
                 mag = {}
             end
+            pcz()
         end
     })
 
@@ -2787,13 +2946,13 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "star"}) do
     })
 end
 
-local Tab = Window:Tab({Title = "other", Icon = "star"}) do
+local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
 
     Tab:Button({
         Title = "Partclaim",
         Desc = "use when partclaim is acting up or idk",
         Callback = function()
-            ClaimOn()
+            pcz()
         end
     })
 
