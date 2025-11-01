@@ -107,7 +107,18 @@ local radius = 0
 local angleSpeed = 10
 local blackHoleActive = false
 
--- from a old script btw
+local PartAttachTool = {
+    Tool = nil,
+    Welds = {},
+    Connection = nil
+}
+local AntiTripSystem = {
+    Enabled = false,
+    Connections = {
+        heartbeat = nil,
+        characterAdded = nil
+    }
+}
 local config = {
     BaseRadius = 10,
     TopRadius = 40,
@@ -125,7 +136,6 @@ local config = {
     DebrisLifetime = 15,
     UpdateRate = 0.05
 }
-
 local modes = {
     "Vertical PartOrbit",
     "Horizontal PartOrbit", 
@@ -319,6 +329,69 @@ phys:Destroy()
  end)
 end
 
+local function toggleAntiTrip()
+    if AntiTripSystem.Enabled then
+        AntiTripSystem.Enabled = false
+        if AntiTripSystem.Connections.heartbeat then
+            AntiTripSystem.Connections.heartbeat:Disconnect()
+            AntiTripSystem.Connections.heartbeat = nil
+        end
+        
+        if AntiTripSystem.Connections.characterAdded then
+            AntiTripSystem.Connections.characterAdded:Disconnect()
+            AntiTripSystem.Connections.characterAdded = nil
+        end
+    else
+        AntiTripSystem.Enabled = true
+        local player = game.Players.LocalPlayer
+        
+        local function monitorHumanoid(humanoid)
+            if AntiTripSystem.Connections.heartbeat then
+                AntiTripSystem.Connections.heartbeat:Disconnect()
+            end
+            
+            AntiTripSystem.Connections.heartbeat = game:GetService("RunService").Heartbeat:Connect(function()
+                if not AntiTripSystem.Enabled or not humanoid or not humanoid.Parent then
+                    if AntiTripSystem.Connections.heartbeat then
+                        AntiTripSystem.Connections.heartbeat:Disconnect()
+                        AntiTripSystem.Connections.heartbeat = nil
+                    end
+                    return
+                end
+                
+                local state = humanoid:GetState()
+                if state == Enum.HumanoidStateType.Seated or
+                   state == Enum.HumanoidStateType.FallingDown or
+                   state == Enum.HumanoidStateType.Ragdoll then
+                    humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+                end
+                
+                if humanoid.Sit then
+                    humanoid.Sit = false
+                end
+            end)
+        end
+        
+        if player.Character then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                monitorHumanoid(humanoid)
+            end
+        end
+        
+        if AntiTripSystem.Connections.characterAdded then
+            AntiTripSystem.Connections.characterAdded:Disconnect()
+        end
+        
+        AntiTripSystem.Connections.characterAdded = player.CharacterAdded:Connect(function(character)
+            if AntiTripSystem.Enabled then
+                local humanoid = character:WaitForChild("Humanoid")
+                monitorHumanoid(humanoid)
+            end
+        end)
+    end
+end
+
 local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
     Tab:Section({Title = "Character Controls"})
     
@@ -371,7 +444,14 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
     Tab:Section({Title = "stuff"})
     local noclipEnabled = false
     local noclipConnection
-    
+    Tab:Button({
+        Title = "Toggle AntiTrip",
+        Desc = "Prevent being tripped, ragdolled, or seated",
+        Callback = function()
+            toggleAntiTrip()
+        end
+    })
+
     Tab:Toggle({
         Title = "Noclip",
         Desc = "Walk through walls",
@@ -2863,12 +2943,6 @@ for i, v in pairs(cors) do
 	end);
 end
 end
-
-local PartAttachTool = {
-    Tool = nil,
-    Welds = {},
-    Connection = nil
-}
 
 local function pmg3()
     local player = game.Players.LocalPlayer
