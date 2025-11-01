@@ -171,13 +171,13 @@ local modes = {
 
 function pcz()
     pcall(function()
-        sethiddenproperty(player, "SimulationRadius", math.huge)
-        sethiddenproperty(player, "MaxSimulationRadius", math.huge)
+        sethiddenproperty(player, "SimulationRadius", 1000)
+        sethiddenproperty(player, "MaxSimulationRadius", 5000)
     end)
 
     local startTime = tick()
     local partsProcessed = 0
-    local maxPartsPerFrame = 50
+    local maxPartsPerFrame = 45
     
     local descendants = Workspace:GetDescendants()
     local totalParts = #descendants
@@ -186,7 +186,6 @@ function pcz()
         local part = descendants[i]
         
         if part and part.Parent and part:IsA("BasePart") then
-            -- Minimal checks for faster claiming
             if not part.Anchored and not part:IsDescendantOf(player.Character) then
                 -- Skip cooldown checks for initial claiming
                 local partId = part:GetFullName()
