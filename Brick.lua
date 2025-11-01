@@ -189,13 +189,13 @@ function pcz()
     -- Optimized part claiming with batch processing
     local startTime = tick()
     local partsProcessed = 0
-    local maxPartsPerFrame = 25 -- Reduced for better performance
+    local maxPartsPerFrame = 30
     
     -- Use GetPartsInRadius for better performance than GetDescendants
     local character = player.Character
     local center = character and character:FindFirstChild("HumanoidRootPart") and character.HumanoidRootPart.Position or Vector3.new(0, 0, 0)
     
-    local parts = workspace:GetPartBoundsInRadius(center, 500) -- Limit range initially
+    local parts = workspace:GetPartBoundsInRadius(center, 555)
     
     for i, part in ipairs(parts) do
         if partsProcessed >= maxPartsPerFrame then
@@ -225,9 +225,8 @@ function pcz()
         end
     end
     
-    -- Optimized heartbeat connection with throttling
     local lastProcessTime = 0
-    local processInterval = 0.1 -- Process every 0.1 seconds instead of every frame
+    local processInterval = 0.1
     
     heartbeatConnection = RunService.Heartbeat:Connect(function()
         pcall(function()
@@ -268,7 +267,6 @@ function pcz()
         end
     end)
     
-    -- Optimized descendant added connection
     connection = Workspace.DescendantAdded:Connect(function(part)
         if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
             -- Add a small delay to prevent spam
@@ -289,8 +287,6 @@ function pcz()
         end
     end)
 end
-
-pcz()
 
 local function fly()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/F/refs/heads/main/F", true))()
@@ -2336,7 +2332,6 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
     })
 end
 
-
 local LocalPlayer = Players.LocalPlayer
 local function GetPlayerList()
     local playerList = {"me"}
@@ -2363,6 +2358,9 @@ end
 
 local currentTargetPlayer = LocalPlayer
 local Folder, Attachment1, humanoidRootPart
+local controlledParts = {} -- Track parts we're controlling
+local descendantConnection = nil
+local renderLoop = nil
 
 local function setupPlayer(targetPlayer)
     local character = targetPlayer.Character
@@ -2373,10 +2371,14 @@ local function setupPlayer(targetPlayer)
 
     if Folder then
         Folder:Destroy()
+        Folder = nil
     end
     
     Folder = Instance.new("Folder", Workspace)
+    Folder.Name = "BlackHoleAttachments"
+    
     local Part = Instance.new("Part", Folder)
+    Part.Name = "BlackHoleCenter"
     Attachment1 = Instance.new("Attachment", Part)
     Part.Anchored = true
     Part.CanCollide = false
@@ -2423,6 +2425,7 @@ local function ForcePart(v)
                 x:Destroy()
             end
         end
+        
         if v:FindFirstChild("Attachment") then
             v:FindFirstChild("Attachment"):Destroy()
         end
@@ -2434,6 +2437,7 @@ local function ForcePart(v)
         end
         v.CanCollide = false
         
+        -- Create new constraints
         local Torque = Instance.new("Torque", v)
         Torque.Torque = Vector3.new(1000000, 1000000, 1000000)
         local AlignPosition = Instance.new("AlignPosition", v)
@@ -2444,7 +2448,28 @@ local function ForcePart(v)
         AlignPosition.Responsiveness = 500
         AlignPosition.Attachment0 = Attachment2
         AlignPosition.Attachment1 = Attachment1
+        controlledParts[v] = {
+            Torque = Torque,
+            AlignPosition = AlignPosition,
+            Attachment = Attachment2
+        }
     end
+end
+
+local function releaseAllParts()
+    for part, constraints in pairs(controlledParts) do
+        if part and part.Parent then
+            -- Remove all constraints we added
+            for _, constraint in pairs(constraints) do
+                if constraint and constraint.Parent then
+                    constraint:Destroy()
+                end
+            end
+            -- Reset part properties
+            part.CanCollide = true
+        end
+    end
+    controlledParts = {}
 end
 
 local function toggleBlackHole()
@@ -2454,30 +2479,51 @@ local function toggleBlackHole()
         for _, v in next, Workspace:GetDescendants() do
             ForcePart(v)
         end
-
-        Workspace.DescendantAdded:Connect(function(v)
+        descendantConnection = Workspace.DescendantAdded:Connect(function(v)
             if blackHoleActive then
                 ForcePart(v)
             end
         end)
-
-        spawn(function()
-            while blackHoleActive and RunService.RenderStepped:Wait() do
-                if humanoidRootPart and humanoidRootPart.Parent then
-                    angle = angle + math.rad(angleSpeed)
-                    
-                    local offsetX = math.cos(angle) * radius
-                    local offsetZ = math.sin(angle) * radius
-
-                    Attachment1.WorldCFrame = humanoidRootPart.CFrame * CFrame.new(offsetX, 0, offsetZ)
-                else
-                    humanoidRootPart, Attachment1 = setupPlayer(currentTargetPlayer)
+        renderLoop = RunService.RenderStepped:Connect(function()
+            if not blackHoleActive then
+                if renderLoop then
+                    renderLoop:Disconnect()
+                    renderLoop = nil
                 end
+                return
+            end
+            
+            if humanoidRootPart and humanoidRootPart.Parent then
+                angle = angle + math.rad(angleSpeed)
+                
+                local offsetX = math.cos(angle) * radius
+                local offsetZ = math.sin(angle) * radius
+
+                Attachment1.WorldCFrame = humanoidRootPart.CFrame * CFrame.new(offsetX, 0, offsetZ)
+            else
+                humanoidRootPart, Attachment1 = setupPlayer(currentTargetPlayer)
             end
         end)
     else
+        if descendantConnection then
+            descendantConnection:Disconnect()
+            descendantConnection = nil
+        end
+        
+        if renderLoop then
+            renderLoop:Disconnect()
+            renderLoop = nil
+        end
+        
+        releaseAllParts()
+        
         if Attachment1 then
-            Attachment1.WorldCFrame = CFrame.new(0, -1000, 0)
+            Attachment1.WorldCFrame = CFrame.new(0, -10000, 0)
+        end
+        
+        if Folder then
+            Folder:Destroy()
+            Folder = nil
         end
     end
 end
@@ -2487,7 +2533,12 @@ local function updateTargetPlayer(playerName)
     if newTarget then
         currentTargetPlayer = newTarget
         if blackHoleActive then
-            humanoidRootPart, Attachment1 = setupPlayer(currentTargetPlayer)
+            -- Restart black hole with new target
+            local wasActive = blackHoleActive
+            toggleBlackHole() -- Turn off
+            if wasActive then
+                toggleBlackHole() -- Turn back on with new target
+            end
         end
     end
 end
@@ -2498,6 +2549,7 @@ LocalPlayer.CharacterAdded:Connect(function()
         if blackHoleActive then
             local wasActive = blackHoleActive
             blackHoleActive = false
+            releaseAllParts() -- Clean up first
             if wasActive then
                 toggleBlackHole()
             end
@@ -2540,7 +2592,6 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "moon"}) do
         end
     })
 
-    --  Slider
     Tab:Slider({
         Title = "Rotation Speed",
         Min = 1,
@@ -2558,16 +2609,11 @@ Players.PlayerRemoving:Connect(function(player)
     if player == currentTargetPlayer then
         currentTargetPlayer = LocalPlayer
         if blackHoleActive then
-            humanoidRootPart, Attachment1 = setupPlayer(LocalPlayer)
-        end
-    end
-end)
-
-spawn(function()
-    while true do
-        RunService.RenderStepped:Wait()
-        if blackHoleActive then
-            angle = angle + math.rad(angleSpeed)
+            local wasActive = blackHoleActive
+            toggleBlackHole() -- Turn off
+            if wasActive then
+                toggleBlackHole() -- Turn back on with local player
+            end
         end
     end
 end)
@@ -3241,11 +3287,11 @@ local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
         end
     })
 end
-
 Window:Notify({
     Title = "script made by @hmmm5650",
     Desc = "Enter Text... (ಠ⁠ ͜⁠ʖ⁠ ⁠ಠ)",
     Time = 5
 })
+pcz()
 
 -- fin
