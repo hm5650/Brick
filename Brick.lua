@@ -171,88 +171,38 @@ local modes = {
 
 function pcz()
     pcall(function()
-        sethiddenproperty(player, "SimulationRadius", 1000)
-        sethiddenproperty(player, "MaxSimulationRadius", 5000)
+        sethiddenproperty(player, "SimulationRadius", math.huge)
+        sethiddenproperty(player, "MaxSimulationRadius", math.huge)
     end)
 
-    local startTime = tick()
-    local partsProcessed = 0
-    local maxPartsPerFrame = 45
-    
-    local descendants = Workspace:GetDescendants()
-    local totalParts = #descendants
-    
-    for i = 1, totalParts do
-        local part = descendants[i]
-        
-        if part and part.Parent and part:IsA("BasePart") then
-            if not part.Anchored and not part:IsDescendantOf(player.Character) then
-                -- Skip cooldown checks for initial claiming
-                local partId = part:GetFullName()
-                
-                if not claimedParts[part] then
-                    -- Quick claim without extensive validation
-                    claimedParts[part] = {
-                        CanCollide = part.CanCollide,
-                        claimed = true
-                    }
-                    
-                    pcall(function()
-                        part.CanCollide = false
-                        part.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01)
-                        part:SetNetworkOwner(player)
-                    end)
-                    
-                    partsProcessed = partsProcessed + 1
-                end
-            end
-        end
-        
-        if partsProcessed % 200 == 0 then
-            RunService.Heartbeat:Wait()
-        end
-        
-        if tick() - startTime > 0.033 then
-            break
-        end
-    end
-    
+    -- Disconnect existing connections to prevent duplicates
     if heartbeatConnection then 
         heartbeatConnection:Disconnect() 
+        heartbeatConnection = nil
     end
     
     if connection then 
         connection:Disconnect() 
+        connection = nil
     end
+
+    -- Optimized part claiming with batch processing
+    local startTime = tick()
+    local partsProcessed = 0
+    local maxPartsPerFrame = 25 -- Reduced for better performance
     
-    heartbeatConnection = RunService.Heartbeat:Connect(function()
-        pcall(function()
-            sethiddenproperty(player, "SimulationRadius", math.huge)
-        end)
-        
-        local processed = 0
-        for part, data in pairs(claimedParts) do
-            if processed < 50 then -- Process more parts per frame
-                if part and part.Parent then
-                    pcall(function()
-                        if part:GetNetworkOwner() ~= player then
-                            part:SetNetworkOwner(player)
-                        end
-                        part.CanCollide = false
-                    end)
-                else
-                    claimedParts[part] = nil
-                end
-                processed = processed + 1
-            else
-                break
-            end
+    -- Use GetPartsInRadius for better performance than GetDescendants
+    local character = player.Character
+    local center = character and character:FindFirstChild("HumanoidRootPart") and character.HumanoidRootPart.Position or Vector3.new(0, 0, 0)
+    
+    local parts = workspace:GetPartBoundsInRadius(center, 500) -- Limit range initially
+    
+    for i, part in ipairs(parts) do
+        if partsProcessed >= maxPartsPerFrame then
+            break
         end
-    end)
-    
-    connection = Workspace.DescendantAdded:Connect(function(part)
+        
         if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
-            -- Immediate claim without cooldown
             if not claimedParts[part] then
                 claimedParts[part] = {
                     CanCollide = part.CanCollide,
@@ -264,26 +214,80 @@ function pcz()
                     part.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01)
                     part:SetNetworkOwner(player)
                 end)
+                
+                partsProcessed = partsProcessed + 1
             end
         end
-    end)
-end
-
-local function claimPart(part)
-    if not part or not part.Parent or not part:IsA("BasePart") then return end
-    if part.Anchored or part:IsDescendantOf(player.Character) then return end
-    if not claimedParts[part] then
-        claimedParts[part] = {
-            CanCollide = part.CanCollide,
-            claimed = true
-        }
-        part.CanCollide = false
-        part.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01)
         
-        pcall(function()
-            part:SetNetworkOwner(player)
-        end)
+        -- Yield every few parts to prevent freezing
+        if i % 50 == 0 then
+            RunService.Heartbeat:Wait()
+        end
     end
+    
+    -- Optimized heartbeat connection with throttling
+    local lastProcessTime = 0
+    local processInterval = 0.1 -- Process every 0.1 seconds instead of every frame
+    
+    heartbeatConnection = RunService.Heartbeat:Connect(function()
+        pcall(function()
+            sethiddenproperty(player, "SimulationRadius", math.huge)
+        end)
+        
+        local currentTime = tick()
+        if currentTime - lastProcessTime < processInterval then
+            return
+        end
+        lastProcessTime = currentTime
+        
+        -- Process parts in smaller batches
+        local processed = 0
+        local partsToRemove = {}
+        
+        for part, data in pairs(claimedParts) do
+            if processed >= 30 then -- Smaller batch size
+                break
+            end
+            
+            if part and part.Parent then
+                pcall(function()
+                    if part:GetNetworkOwner() ~= player then
+                        part:SetNetworkOwner(player)
+                    end
+                    part.CanCollide = false
+                end)
+                processed = processed + 1
+            else
+                table.insert(partsToRemove, part)
+            end
+        end
+        
+        -- Clean up invalid parts
+        for _, part in ipairs(partsToRemove) do
+            claimedParts[part] = nil
+        end
+    end)
+    
+    -- Optimized descendant added connection
+    connection = Workspace.DescendantAdded:Connect(function(part)
+        if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
+            -- Add a small delay to prevent spam
+            task.delay(0.1, function()
+                if not claimedParts[part] then
+                    claimedParts[part] = {
+                        CanCollide = part.CanCollide,
+                        claimed = true
+                    }
+                    
+                    pcall(function()
+                        part.CanCollide = false
+                        part.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01)
+                        part:SetNetworkOwner(player)
+                    end)
+                end
+            end)
+        end
+    end)
 end
 
 pcz()
@@ -2445,7 +2449,6 @@ end
 
 local function toggleBlackHole()
     blackHoleActive = not blackHoleActive
-    pcz()
     if blackHoleActive then
         humanoidRootPart, Attachment1 = setupPlayer(currentTargetPlayer)
         for _, v in next, Workspace:GetDescendants() do
@@ -2522,7 +2525,6 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "moon"}) do
             btnclick()
             pcz()
             toggleBlackHole()
-            pcz()
         end
     })
 
