@@ -444,13 +444,6 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
     Tab:Section({Title = "stuff"})
     local noclipEnabled = false
     local noclipConnection
-    Tab:Button({
-        Title = "Toggle AntiTrip",
-        Desc = "Prevent being tripped, ragdolled, or seated",
-        Callback = function()
-            toggleAntiTrip()
-        end
-    })
 
     Tab:Toggle({
         Title = "Noclip",
@@ -3236,6 +3229,14 @@ local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
         Callback = function()
             btnclick()
             wha()
+        end
+    })
+
+    Tab:Button({
+        Title = "Toggle AntiTrip",
+        Desc = "Prevent being tripped, ragdolled, or seated",
+        Callback = function()
+            toggleAntiTrip()
         end
     })
 end
