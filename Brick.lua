@@ -130,6 +130,12 @@ local Folder, Attachment1, humanoidRootPart
 local controlledParts = {}
 local descendantConnection = nil
 local renderLoop = nil
+local blackHoleSphere = nil
+local blackHoleActive = false
+local blackHoleSuctionStrength = 100
+local blackHoleRadius = 50
+local blackHoleConnection = nil
+local blackHoleParts = {}
 
 local PartAttachTool = {
     Tool = nil,
@@ -2005,7 +2011,7 @@ local function meme()
     return zzz
 end
 
-local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
+local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
     -- Section
     Tab:Section({Title = "Orbit Modification"})
 
@@ -2172,6 +2178,91 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "sun"}) do
     })
 end
 
+local function createBlackHoleSphere(position)
+    if blackHoleSphere then
+        blackHoleSphere:Destroy()
+    end
+    
+    blackHoleSphere = Instance.new("Part")
+    blackHoleSphere.Name = "BlackHoleSphere"
+    blackHoleSphere.Anchored = true
+    blackHoleSphere.CanCollide = false
+    blackHoleSphere.Size = Vector3.new(20, 20, 20)
+    blackHoleSphere.Shape = Enum.PartType.Ball
+    blackHoleSphere.Material = Enum.Material.SmoothPlastic
+    blackHoleSphere.BrickColor = BrickColor.new("Really black")
+    blackHoleSphere.Position = position + Vector3.new(0, 100, 0)
+    blackHoleSphere.Parent = workspace
+    
+    return blackHoleSphere
+end
+
+local function applyBlackHoleSuction()
+    if not blackHoleSphere or not blackHoleActive then return end
+    
+    local blackHolePosition = blackHoleSphere.Position
+    local parts = workspace:GetPartBoundsInRadius(blackHolePosition, blackHoleRadius * 5)
+    for _, part in ipairs(parts) do
+        if part:IsA("BasePart") and not part.Anchored and part ~= blackHoleSphere then
+            if not part:IsDescendantOf(LocalPlayer.Character) then
+                local partPos = part.Position
+                local direction = (blackHolePosition - partPos).Unit
+                local distance = (blackHolePosition - partPos).Magnitude
+                
+                if distance <= blackHoleRadius * 5 then
+                    local forceMultiplier = (1 - (distance / (blackHoleRadius * 5))) * blackHoleSuctionStrength
+                    local suctionForce = direction * forceMultiplier
+                    part.Velocity = part.Velocity + suctionForce
+                    
+                    if not blackHoleParts[part] then
+                        blackHoleParts[part] = {
+                            OriginalMass = part:GetMass(),
+                            OriginalProperties = part.CustomPhysicalProperties
+                        }
+                        part.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01)
+                    end
+                end
+            end
+        end
+    end
+    
+    for part in pairs(blackHoleParts) do
+        if not part or not part.Parent then
+            blackHoleParts[part] = nil
+        end
+    end
+end
+
+local function toggleBlackHole()
+    blackHoleActive = not blackHoleActive
+    
+    if blackHoleActive then
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local spawnPosition = character.HumanoidRootPart.Position
+            createBlackHoleSphere(spawnPosition)
+            blackHoleConnection = RunService.Heartbeat:Connect(applyBlackHoleSuction)
+        end
+    else
+        if blackHoleConnection then
+            blackHoleConnection:Disconnect()
+            blackHoleConnection = nil
+        end
+        
+        if blackHoleSphere then
+            blackHoleSphere:Destroy()
+            blackHoleSphere = nil
+        end
+        
+        for part, data in pairs(blackHoleParts) do
+            if part and part.Parent then
+                part.CustomPhysicalProperties = data.OriginalProperties
+            end
+        end
+        blackHoleParts = {}
+    end
+end
+
 local LocalPlayer = Players.LocalPlayer
 local function GetPlayerList()
     local playerList = {"me"}
@@ -2297,13 +2388,12 @@ local function releaseAllParts()
                     constraint:Destroy()
                 end
             end
-            part.CanCollide = true
         end
     end
     controlledParts = {}
 end
 
-local function toggleBlackHole()
+local function togglebh()
     blackHoleActive = not blackHoleActive
     if blackHoleActive then
         humanoidRootPart, Attachment1 = setupPlayer(currentTargetPlayer)
@@ -2365,9 +2455,9 @@ local function updateTargetPlayer(playerName)
         currentTargetPlayer = newTarget
         if blackHoleActive then
             local wasActive = blackHoleActive
-            toggleBlackHole()
+            togglebh()
             if wasActive then
-                toggleBlackHole()
+                togglebh()
             end
         end
     end
@@ -2381,13 +2471,13 @@ LocalPlayer.CharacterAdded:Connect(function()
             blackHoleActive = false
             releaseAllParts()
             if wasActive then
-                toggleBlackHole()
+                togglebh()
             end
         end
     end
 end)
 
-local Tab = Window:Tab({Title = "Black Hole", Icon = "atom"}) do
+local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
     Tab:Section({Title = "Black Hole Controls"})
 
     Tab:Dropdown({
@@ -2406,7 +2496,7 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "atom"}) do
         Callback = function()
             btnclick()
             pcz()
-            toggleBlackHole()
+            togglebh()
         end
     })
 
@@ -2433,6 +2523,46 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "atom"}) do
             angleSpeed = val
         end
     })
+    Tab:Section({Title = ""})
+    Tab:Button({
+        Title = "Summon Black Hole",
+        Desc = "Create a black sphere that sucks up unanchored parts",
+        Callback = function()
+            btnclick()
+            pcz()
+            toggleBlackHole()
+        end
+    })
+    
+    Tab:Slider({
+        Title = "Suction Strength",
+        Desc = nil,
+        Min = 10,
+        Max = 500,
+        Rounding = 0,
+        Value = 100,
+        Callback = function(val)
+            slidersound()
+            blackHoleSuctionStrength = val
+        end
+    })
+    
+    Tab:Slider({
+        Title = "Black Hole Radius",
+        Desc = "Size of the black hole",
+        Min = 10,
+        Max = 200,
+        Rounding = 0,
+        Value = 50,
+        Callback = function(val)
+            slidersound()
+            blackHoleRadius = val
+            if blackHoleSphere then
+                blackHoleSphere.Size = Vector3.new(val / 2.5, val / 2.5, val / 2.5)
+            end
+        end
+    })
+
 end
 
 Players.PlayerRemoving:Connect(function(player)
@@ -2440,9 +2570,9 @@ Players.PlayerRemoving:Connect(function(player)
         currentTargetPlayer = LocalPlayer
         if blackHoleActive then
             local wasActive = blackHoleActive
-            toggleBlackHole()
+            togglebh()
             if wasActive then
-                toggleBlackHole()
+                togglebh()
             end
         end
     end
@@ -4218,7 +4348,6 @@ local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
                 end
                 
                 part.CustomPhysicalProperties = nil
-                part.CanCollide = true
             end
         end
         self.Parts = {}
