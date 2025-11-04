@@ -2927,21 +2927,6 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
     })
 
     Tab:Toggle({  
-        Title = "Teleport Parts To Others",  
-        Desc = "fling em all!",  
-        Value = false,  
-        Callback = function(v)  
-            togglesound()
-            if v then
-                pcz()
-                lol()
-            else
-                fjd()
-            end
-        end  
-    })
-
-    Tab:Toggle({  
         Title = "Invert Parts Gravity",  
         Desc = "omg floating parts",  
         Value = false,  
