@@ -62,6 +62,16 @@ local Window = Library:Window({
     }
 })
 
+-- Sidebar Vertical Separator
+local SidebarLine = Instance.new("Frame")
+SidebarLine.Size = UDim2.new(0, 1, 1, 0)
+SidebarLine.Position = UDim2.new(0, 140, 0, 0) -- adjust if needed
+SidebarLine.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+SidebarLine.BorderSizePixel = 0
+SidebarLine.ZIndex = 5
+SidebarLine.Name = "SidebarLine"
+SidebarLine.Parent = game:GetService("CoreGui") -- Or Window.Gui if accessible
+
 local player = game.Players.LocalPlayer
 settings().Physics.AllowSleep = false
 settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.Disabled
@@ -81,14 +91,13 @@ local mag = {}
 local WIND_STRENGTH = 7000 
 local INITIAL_BOOST = 12
 local MAX_HORIZONTAL_SPEED = 45
-local SIMULATION_RADIUS = math.huge
 local GUST_FREQUENCY = 0.6
 local GUST_VARIATION = 0.6
 local RANDOM_SEED_SCALE = 7.3
 local GRAVITY_MULTIPLIER = 1.5
 local INITIAL_BOOST = 10
 local MAX_SPEED = 20
-local SIMULATION_RADIUS = math.huge
+local SIMULATION_RADIUS = 5000
 local ringParts = {}
 local radius = 50
 local speed = 2
@@ -106,6 +115,7 @@ local angle = 1
 local radius = 0
 local angleSpeed = 10
 local blackHoleActive = false
+local getpart = 5000
 
 local PartAttachTool = {
     Tool = nil,
@@ -171,11 +181,9 @@ local modes = {
 
 function pcz()
     pcall(function()
-        sethiddenproperty(player, "SimulationRadius", math.huge)
-        sethiddenproperty(player, "MaxSimulationRadius", math.huge)
+        sethiddenproperty(player, "SimulationRadius", getpart)
+        sethiddenproperty(player, "MaxSimulationRadius", getpart)
     end)
-
-    -- Disconnect existing connections to prevent duplicates
     if heartbeatConnection then 
         heartbeatConnection:Disconnect() 
         heartbeatConnection = nil
@@ -185,17 +193,14 @@ function pcz()
         connection:Disconnect() 
         connection = nil
     end
-
-    -- Optimized part claiming with batch processing
     local startTime = tick()
     local partsProcessed = 0
     local maxPartsPerFrame = 30
     
-    -- Use GetPartsInRadius for better performance than GetDescendants
     local character = player.Character
     local center = character and character:FindFirstChild("HumanoidRootPart") and character.HumanoidRootPart.Position or Vector3.new(0, 0, 0)
     
-    local parts = workspace:GetPartBoundsInRadius(center, 555)
+    local parts = workspace:GetPartBoundsInRadius(center, getpart)
     
     for i, part in ipairs(parts) do
         if partsProcessed >= maxPartsPerFrame then
@@ -219,7 +224,6 @@ function pcz()
             end
         end
         
-        -- Yield every few parts to prevent freezing
         if i % 50 == 0 then
             RunService.Heartbeat:Wait()
         end
@@ -230,7 +234,7 @@ function pcz()
     
     heartbeatConnection = RunService.Heartbeat:Connect(function()
         pcall(function()
-            sethiddenproperty(player, "SimulationRadius", math.huge)
+            sethiddenproperty(player, "SimulationRadius", getpart)
         end)
         
         local currentTime = tick()
@@ -239,12 +243,11 @@ function pcz()
         end
         lastProcessTime = currentTime
         
-        -- Process parts in smaller batches
         local processed = 0
         local partsToRemove = {}
         
         for part, data in pairs(claimedParts) do
-            if processed >= 30 then -- Smaller batch size
+            if processed >= 30 then
                 break
             end
             
@@ -261,7 +264,6 @@ function pcz()
             end
         end
         
-        -- Clean up invalid parts
         for _, part in ipairs(partsToRemove) do
             claimedParts[part] = nil
         end
@@ -269,7 +271,6 @@ function pcz()
     
     connection = Workspace.DescendantAdded:Connect(function(part)
         if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
-            -- Add a small delay to prevent spam
             task.delay(0.1, function()
                 if not claimedParts[part] then
                     claimedParts[part] = {
@@ -390,6 +391,38 @@ local function toggleAntiTrip()
         end)
     end
 end
+
+
+local Tab = Window:Tab({Title = "partclaim", Icon = "folder"}) do
+
+    Tab:Button({
+        Title = "Partclaim",
+        Desc = nil,
+        Callback = function()
+            btnclick()
+            pcz()
+        end
+    })
+
+    Tab:Slider({
+        Title = "Grab Part Radius",
+        Desc = "more = lagger but better",
+        Min = 100,
+        Max = 10000,
+        Rounding = 0,
+        Value = 1000,
+        Callback = function(val)
+            slidersound()
+            SIMULATION_RADIUS = val
+            getpart = val
+            pcall(function()
+                sethiddenproperty(player, "SimulationRadius", getpart)
+                sethiddenproperty(player, "MaxSimulationRadius", getpart)
+            end)
+        end
+    })
+end
+
 
 local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
     Tab:Section({Title = "Character Controls"})
@@ -1186,16 +1219,6 @@ function tt()
         activateTornado()
     end
 end
-
--- Sidebar Vertical Separator
-local SidebarLine = Instance.new("Frame")
-SidebarLine.Size = UDim2.new(0, 1, 1, 0)
-SidebarLine.Position = UDim2.new(0, 140, 0, 0) -- adjust if needed
-SidebarLine.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-SidebarLine.BorderSizePixel = 0
-SidebarLine.ZIndex = 5
-SidebarLine.Name = "SidebarLine"
-SidebarLine.Parent = game:GetService("CoreGui") -- Or Window.Gui if accessible
 
 local LocalPlayer = Players.LocalPlayer
 if not getgenv().Network then
@@ -3262,15 +3285,6 @@ end
 local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
 
     Tab:Button({
-        Title = "Partclaim",
-        Desc = "use when partclaim is acting up or idk",
-        Callback = function()
-            btnclick()
-            pcz()
-        end
-    })
-
-    Tab:Button({
         Title = "Anti Unachored Fling",
         Desc = nil,
         Callback = function()
@@ -3293,5 +3307,4 @@ Window:Notify({
     Time = 5
 })
 pcz()
-
 -- fin
