@@ -116,6 +116,20 @@ local bhradius = 0
 local angleSpeed = 10
 local blackHoleActive = false
 local getpart = 5000
+local networkown = {}
+local cb = nil
+local ts = 10
+local ss = 10
+local ucf = false
+local ohb = nil
+local tpuaActive = false
+local tpuaTarget = "others"
+local tpuaHandler = nil
+local currentTargetPlayer = LocalPlayer
+local Folder, Attachment1, humanoidRootPart
+local controlledParts = {}
+local descendantConnection = nil
+local renderLoop = nil
 
 local PartAttachTool = {
     Tool = nil,
@@ -562,198 +576,6 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
             end
         end
     })
-end
-
-local LocalPlayer = Players.LocalPlayer
-local PartsFolder = Instance.new("Folder")
-PartsFolder.Parent = Workspace
-PartsFolder.Name = "DestroyerSystem"
-
-local function SetupNetwork()
-    settings().Physics.AllowSleep = false
-    settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.Disabled
-    
-    if not getgenv().NetworkBypass then
-        getgenv().NetworkBypass = true
-        local old
-        old = hookmetamethod(game, "__index", newcclosure(function(self, idx)
-            if idx == "NetworkOwnershipRule" then
-                return Enum.NetworkOwnership.Manual
-            end
-            return old(self, idx)
-        end))
-    end
-end
-
-local handler = nil
-
-local function InitializeBypass()
-    local mt = getrawmetatable(game)
-    setreadonly(mt, false)
-    local old = mt.__namecall
-    mt.__namecall = newcclosure(function(self, ...)
-        local args = {...}
-        local method = getnamecallmethod()
-        if method == "FireServer" then
-            return nil
-        end
-        return old(self, ...)
-    end)
-    
-    for _, v in next, getconnections(game:GetService("ScriptContext").Error) do 
-        v:Disable()
-    end
-    
-    for _, v in next, getconnections(game:GetService("LogService").MessageOut) do 
-        v:Disable()
-    end
-end
-
-local function net()
-    settings().Physics.AllowSleep = false
-    settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.Disabled
-    
-    if not getgenv().NetworkBypass then
-        getgenv().NetworkBypass = true
-        local old
-        old = hookmetamethod(game, "__index", newcclosure(function(self, idx)
-            if idx == "NetworkOwnershipRule" then
-                return Enum.NetworkOwnership.Manual
-            end
-            return old(self, idx)
-        end))
-    end
-end
-
-local BasePartHandler = {}
-BasePartHandler.__index = BasePartHandler
-
-function BasePartHandler.new()
-    local self = setmetatable({}, BasePartHandler)
-    self.Connections = {}
-    self.TargetParts = {}
-    return self
-end
-
-function BasePartHandler:SetupPart(part)
-    if part:IsA("BasePart") and not part.Anchored then
-        if not part:IsDescendantOf(LocalPlayer.Character) then
-            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
-            
-            local attachment = Instance.new("Attachment")
-            attachment.Parent = part
-            
-            local alignPosition = Instance.new("AlignPosition")
-            alignPosition.Mode = Enum.PositionAlignmentMode.OneAttachment
-            alignPosition.Attachment0 = attachment
-            alignPosition.MaxForce = 999999999999999
-            alignPosition.MaxVelocity = math.huge
-            alignPosition.Responsiveness = 200
-            alignPosition.Parent = part
-            
-            local gyro = Instance.new("BodyGyro")
-            gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            gyro.P = 100000
-            gyro.Parent = part
-
-            table.insert(self.TargetParts, {
-                Part = part,
-                Attachment = attachment,
-                AlignPosition = alignPosition,
-                Gyro = gyro
-            })
-        end
-    end
-end
-
-function BasePartHandler:Start()
-    for _, v in ipairs(Workspace:GetDescendants()) do
-        self:SetupPart(v)
-    end
-
-    table.insert(self.Connections, Workspace.DescendantAdded:Connect(function(v)
-        self:SetupPart(v)
-    end))
-
-    table.insert(self.Connections, RunService.Heartbeat:Connect(function()
-        sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
-        sethiddenproperty(LocalPlayer, "MaxSimulationRadius", math.huge)
-        
-        for _, targetData in ipairs(self.TargetParts) do
-            pcall(function()
-                local part = targetData.Part
-                if part and part.Parent then
-                    local potentialTargets = {}
-                    for _, player in ipairs(Players:GetPlayers()) do
-                        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                            table.insert(potentialTargets, player)
-                        end
-                    end
-                    
-                    if #potentialTargets > 0 then
-                        local randomPlayer = potentialTargets[math.random(1, #potentialTargets)]
-                        local targetPos = randomPlayer.Character.HumanoidRootPart.Position
-                        
-                        targetData.AlignPosition.Position = targetPos
-                        targetData.Gyro.CFrame = CFrame.new(targetPos) * CFrame.Angles(
-                            math.rad(math.random(-360, 360)),
-                            math.rad(math.random(-360, 360)),
-                            math.rad(math.random(-360, 360))
-                        )
-                        
-                        part.Velocity = Vector3.new(math.random(-500, 500), math.random(-500, 500), math.random(-500, 500))
-                        part.RotVelocity = Vector3.new(math.random(-500, 500), math.random(-500, 500), math.random(-500, 500))
-                    end
-                end
-            end)
-        end
-    end))
-end
-
-function BasePartHandler:Stop()
-    for _, connection in ipairs(self.Connections) do
-        connection:Disconnect()
-    end
-    
-    for _, targetData in ipairs(self.TargetParts) do
-        pcall(function()
-            if targetData.Part and targetData.Part.Parent then
-                targetData.AlignPosition:Destroy()
-                targetData.Gyro:Destroy()
-                targetData.Attachment:Destroy()
-                targetData.Part.CustomPhysicalProperties = nil
-            end
-        end)
-    end
-    
-    self.Connections = {}
-    self.TargetParts = {}
-end
-
-local function lol()
-    InitializeBypass()
-    SetupNetwork()
-    
-    handler = BasePartHandler.new()
-    handler:Start()
-    
-    spawn(function()
-        while wait() do
-            if LocalPlayer.Character then
-                for _, connection in ipairs(getconnections(LocalPlayer.Character.DescendantAdded)) do
-                    connection:Disable()
-                end
-            end
-            game:GetService("NetworkClient"):SetOutgoingKBPSLimit(math.huge)
-        end
-    end)
-end
-
-local function fjd()
-    if handler then
-        handler:Stop()
-        handler = nil
-    end
 end
 
 local player = game.Players.LocalPlayer
@@ -1483,7 +1305,7 @@ local function calculateRingPosition(index, totalParts, center)
         offsetY = math.sin(baseAngle * 2) * (radius * 0.1)
         offsetZ = math.sin(angle) * r
     elseif currentMode == 28 then -- Rose Curve
-        local n = 3 -- number of petals
+        local n = 3
         local d = 2
         local k = n/d
         local r = radius * math.cos(k * angle)
@@ -1610,11 +1432,6 @@ end
 local function UpdateTargetPlayer(playerName)
     targetplr = playerName
     TargetPlayer = GetPlayer(playerName)
-    if TargetPlayer then
-        print("Now orbiting:", TargetPlayer.Name)
-    else
-        print("Player not found:", playerName)
-    end
 end
 
 if not getgenv().Network then
@@ -1701,7 +1518,6 @@ end
 local orbitEnabled = false
 function toggleorbit()
     orbitEnabled = not orbitEnabled
-    print("Orbit:", orbitEnabled)
 end
 
 RunService.Heartbeat:Connect(function()
@@ -2380,12 +2196,6 @@ local function GetPlayer(name)
     return LocalPlayer
 end
 
-local currentTargetPlayer = LocalPlayer
-local Folder, Attachment1, humanoidRootPart
-local controlledParts = {} -- Track parts we're controlling
-local descendantConnection = nil
-local renderLoop = nil
-
 local function setupPlayer(targetPlayer)
     local character = targetPlayer.Character
     if not character then
@@ -2461,7 +2271,6 @@ local function ForcePart(v)
         end
         v.CanCollide = false
         
-        -- Create new constraints
         local Torque = Instance.new("Torque", v)
         Torque.Torque = Vector3.new(1000000, 1000000, 1000000)
         local AlignPosition = Instance.new("AlignPosition", v)
@@ -2483,13 +2292,11 @@ end
 local function releaseAllParts()
     for part, constraints in pairs(controlledParts) do
         if part and part.Parent then
-            -- Remove all constraints we added
             for _, constraint in pairs(constraints) do
                 if constraint and constraint.Parent then
                     constraint:Destroy()
                 end
             end
-            -- Reset part properties
             part.CanCollide = true
         end
     end
@@ -2557,11 +2364,10 @@ local function updateTargetPlayer(playerName)
     if newTarget then
         currentTargetPlayer = newTarget
         if blackHoleActive then
-            -- Restart black hole with new target
             local wasActive = blackHoleActive
-            toggleBlackHole() -- Turn off
+            toggleBlackHole()
             if wasActive then
-                toggleBlackHole() -- Turn back on with new target
+                toggleBlackHole()
             end
         end
     end
@@ -2581,7 +2387,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-local Tab = Window:Tab({Title = "Black Hole", Icon = "moon"}) do
+local Tab = Window:Tab({Title = "Black Hole", Icon = "atom"}) do
     Tab:Section({Title = "Black Hole Controls"})
 
     Tab:Dropdown({
@@ -3149,7 +2955,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
             end
         end  
     })
-
+    Tab:Section({Title = ""})
     Tab:Toggle({  
         Title = "Heavy Winds",  
         Desc = "my wig D:",  
@@ -3165,6 +2971,132 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         end  
     })
 
+    local function retain(part)
+        if part and part:IsA("BasePart") and not part.Anchored then
+            local rt = {part.CanCollide, part.CanTouch, part.CustomPhysicalProperties}
+            part.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0, 0, 0, 0)
+            part.CanCollide = false
+            part.CanTouch = false
+            return rt
+        end
+        return nil
+    end
+
+    local function dopart2(v)
+        if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(game.Players.LocalPlayer.Character) then
+            local stuff = retain(v)
+            if stuff then
+                networkown[v] = {math.random(1,10000000)/100000, stuff[1], stuff[2], stuff[3]}
+                
+                if not v:FindFirstChild("bp") then
+                    local m = v:GetMass()
+                    local bp = Instance.new("BodyPosition")
+                    bp.Name = "bp"
+                    bp.P = m/0.64e-5
+                    bp.D = m/0.64e-3
+                    bp.MaxForce = Vector3.new(m/0.64e-6, m/0.64e-6, m/0.64e-6)
+                    bp.Parent = v
+                end
+            end
+        end
+    end
+
+    local function scanParts()
+        for i, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") and not v.Anchored and not v:IsDescendantOf(game.Players.LocalPlayer.Character) then
+                dopart2(v)
+            end
+        end
+    end
+
+    local function startPartControl()
+        if ohb then ohb:Disconnect() end
+        
+        ohb = game:GetService("RunService").Heartbeat:Connect(function(dt)
+            local character = game.Players.LocalPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local mpos = character.HumanoidRootPart.Position
+                
+                for part, data in pairs(networkown) do
+                    if part and part.Parent then
+                        data[1] = data[1] + (dt * ss)
+                        local bp = part:FindFirstChild("bp")
+                        
+                        if bp then
+                            if cb == "tornado" then
+                                bp.Position = ((CFrame.new(mpos) * CFrame.Angles(0, data[1] * ss, 0)) * CFrame.new(0, data[1] % (ts) - 6, -ts + math.random(ts))).Position
+                            else
+                                bp.Position = ((CFrame.new(mpos) * CFrame.Angles(0, data[1] * ss, 0)) * CFrame.new(0, data[1] % (ts) - 6, -ts + math.random(ts))).Position
+                            end
+                            
+                            if ucf then
+                                part.Velocity = Vector3.new(9e9, 9e9, 9e9)
+                                part.CFrame = CFrame.new(bp.Position)
+                            end
+                        end
+                    else
+                        networkown[part] = nil
+                    end
+                end
+            end
+        end)
+    end
+
+    local function stopPartControl()
+        if ohb then
+            ohb:Disconnect()
+            ohb = nil
+        end
+        
+        for part, data in pairs(networkown) do
+            if part and part:FindFirstChild("bp") then
+                part.bp:Destroy()
+            end
+        end
+        networkown = {}
+    end
+
+    Tab:Toggle({
+        Title = "Heavy Winds 2",
+        Desc = "woah",
+        Value = false,
+        Callback = function(v)
+            togglesound()
+            if v then
+                cb = "tornado"
+                scanParts()
+                startPartControl()
+            else
+                cb = nil
+                stopPartControl()
+            end
+        end
+    })
+
+    Tab:Slider({
+        Title = "Wind Size",
+        Min = 5,
+        Max = 500,
+        Rounding = 0,
+        Value = 100,
+        Callback = function(val)
+            slidersound()
+            ts = val
+        end
+    })
+
+    Tab:Slider({
+        Title = "Wind Speed",
+        Min = 1,
+        Max = 1000,
+        Rounding = 0,
+        Value = 10,
+        Callback = function(val)
+            slidersound()
+            ss = val
+        end
+    })
+    Tab:Section({Title = ""})
     local function erxa(part)
         if not mag[part] then
             mag[part] = {
@@ -3283,6 +3215,1152 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
     })
 end
 
+local function GetTpuaPlayerList()
+    local playerList = {"others"}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(playerList, player.Name)
+        end
+    end
+    return playerList
+end
+
+local function UpdateTpuaTarget(selectedTarget)
+    tpuaTarget = selectedTarget
+end
+
+local TpuaPartHandler = {}
+TpuaPartHandler.__index = TpuaPartHandler
+
+function TpuaPartHandler.new()
+    local self = setmetatable({}, TpuaPartHandler)
+    self.Connections = {}
+    self.TargetParts = {}
+    return self
+end
+
+function TpuaPartHandler:SetupPart(part)
+    if part:IsA("BasePart") and not part.Anchored then
+        if not part:IsDescendantOf(LocalPlayer.Character) then
+            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+            
+            local attachment = Instance.new("Attachment")
+            attachment.Parent = part
+            
+            local alignPosition = Instance.new("AlignPosition")
+            alignPosition.Mode = Enum.PositionAlignmentMode.OneAttachment
+            alignPosition.Attachment0 = attachment
+            alignPosition.MaxForce = 999999999999999
+            alignPosition.MaxVelocity = math.huge
+            alignPosition.Responsiveness = 200
+            alignPosition.Parent = part
+            
+            local gyro = Instance.new("BodyGyro")
+            gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            gyro.P = 100000
+            gyro.Parent = part
+
+            table.insert(self.TargetParts, {
+                Part = part,
+                Attachment = attachment,
+                AlignPosition = alignPosition,
+                Gyro = gyro
+            })
+        end
+    end
+end
+
+function TpuaPartHandler:Start()
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        self:SetupPart(v)
+    end
+
+    table.insert(self.Connections, Workspace.DescendantAdded:Connect(function(v)
+        self:SetupPart(v)
+    end))
+
+    table.insert(self.Connections, RunService.Heartbeat:Connect(function()
+        sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+        sethiddenproperty(LocalPlayer, "MaxSimulationRadius", math.huge)
+        
+        for _, targetData in ipairs(self.TargetParts) do
+            pcall(function()
+                local part = targetData.Part
+                if part and part.Parent then
+                    local targetPlayer = nil
+                    
+                    if tpuaTarget == "others" then
+                        local potentialTargets = {}
+                        for _, player in ipairs(Players:GetPlayers()) do
+                            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                                table.insert(potentialTargets, player)
+                            end
+                        end
+                        
+                        if #potentialTargets > 0 then
+                            targetPlayer = potentialTargets[math.random(1, #potentialTargets)]
+                        end
+                    else
+                        targetPlayer = GetPlayer(tpuaTarget)
+                    end
+                    
+                    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local targetPos = targetPlayer.Character.HumanoidRootPart.Position
+                        
+                        targetData.AlignPosition.Position = targetPos
+                        targetData.Gyro.CFrame = CFrame.new(targetPos) * CFrame.Angles(
+                            math.rad(math.random(-360, 360)),
+                            math.rad(math.random(-360, 360)),
+                            math.rad(math.random(-360, 360))
+                        )
+                        
+                        part.Velocity = Vector3.new(math.random(-500, 500), math.random(-500, 500), math.random(-500, 500))
+                        part.RotVelocity = Vector3.new(math.random(-500, 500), math.random(-500, 500), math.random(-500, 500))
+                    end
+                end
+            end)
+        end
+    end))
+end
+
+function TpuaPartHandler:Stop()
+    for _, connection in ipairs(self.Connections) do
+        connection:Disconnect()
+    end
+    
+    for _, targetData in ipairs(self.TargetParts) do
+        pcall(function()
+            if targetData.Part and targetData.Part.Parent then
+                targetData.AlignPosition:Destroy()
+                targetData.Gyro:Destroy()
+                targetData.Attachment:Destroy()
+                targetData.Part.CustomPhysicalProperties = nil
+            end
+        end)
+    end
+    
+    self.Connections = {}
+    self.TargetParts = {}
+end
+
+local function InitializeTpuaBypass()
+    local mt = getrawmetatable(game)
+    setreadonly(mt, false)
+    local old = mt.__namecall
+    mt.__namecall = newcclosure(function(self, ...)
+        local args = {...}
+        local method = getnamecallmethod()
+        if method == "FireServer" then
+            return nil
+        end
+        return old(self, ...)
+    end)
+    
+    for _, v in next, getconnections(game:GetService("ScriptContext").Error) do 
+        v:Disable()
+    end
+    
+    for _, v in next, getconnections(game:GetService("LogService").MessageOut) do 
+        v:Disable()
+    end
+end
+
+local function SetupTpuaNetwork()
+    settings().Physics.AllowSleep = false
+    settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.Disabled
+    
+    if not getgenv().TpuaNetworkBypass then
+        getgenv().TpuaNetworkBypass = true
+        local old
+        old = hookmetamethod(game, "__index", newcclosure(function(self, idx)
+            if idx == "NetworkOwnershipRule" then
+                return Enum.NetworkOwnership.Manual
+            end
+            return old(self, idx)
+        end))
+    end
+end
+
+local function StartTpua()
+    InitializeTpuaBypass()
+    SetupTpuaNetwork()
+    
+    tpuaHandler = TpuaPartHandler.new()
+    tpuaHandler:Start()
+    
+    spawn(function()
+        while wait() do
+            if LocalPlayer.Character then
+                for _, connection in ipairs(getconnections(LocalPlayer.Character.DescendantAdded)) do
+                    connection:Disable()
+                end
+            end
+            game:GetService("NetworkClient"):SetOutgoingKBPSLimit(math.huge)
+        end
+    end)
+end
+
+local function StopTpua()
+    if tpuaHandler then
+        tpuaHandler:Stop()
+        tpuaHandler = nil
+    end
+end
+
+local function ToggleTpua()
+    tpuaActive = not tpuaActive
+    
+    if tpuaActive then
+        StartTpua()
+    else
+        StopTpua()
+    end
+end
+
+local Tab = Window:Tab({Title = "Tpua", Icon = "wind"}) do
+    Tab:Section({Title = "Teleport unanchored to Player(s)"})
+
+    Tab:Label({
+        Title = "Brick",
+        Desc = "you might get FPS drops which is Ur problem :D",
+    })
+
+    Tab:Toggle({
+        Title = "Enable Tpua",
+        Desc = "Make parts fly towards selected players",
+        Value = false,
+        Callback = function(v)
+            if v then
+                ToggleTpua()
+            else
+                if tpuaActive then
+                    ToggleTpua()
+                end
+            end
+        end
+    })
+    
+    Tab:Dropdown({
+        Title = "Target Selection",
+        List = GetTpuaPlayerList(),
+        Value = "others",
+        Callback = function(selectedPlayer)
+            UpdateTpuaTarget(selectedPlayer)
+            if tpuaActive then
+                StopTpua()
+                task.wait(0.1)
+                StartTpua()
+            end
+        end
+    })
+end
+
+local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
+
+    local LocalPlayer = Players.LocalPlayer
+    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local HRP = Character:WaitForChild("HumanoidRootPart")
+
+    local AttachmentSystem = {
+        Parts = {},
+        CurrentMode = "None",
+        Enabled = false,
+        AnimationSpeed = 1,
+        ScaleFactor = 1,
+        AutoSize = true,
+        NoCollision = true
+    }
+
+    local AttachmentModes = {
+        ["Angel_Wings"] = {
+            Scale = function(partCount) return {
+                Width = math.min(partCount * 0.4, 8),
+                Height = math.min(partCount * 0.5, 6)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local side = index % 2 == 0 and 1 or -1
+                local layer = math.floor(index / 2) / (total/2)
+                local curve = math.sin(layer * math.pi)
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        side * (scale.Width * layer),
+                        scale.Height * curve,
+                        -layer * 2
+                    ),
+                    Rotation = CFrame.Angles(0, side * 0.5, side * (math.pi/4 * curve))
+                }
+            end
+        },
+
+        ["Demon_Wings"] = {
+            Scale = function(partCount) return {
+                Span = math.min(partCount * 0.6, 10),
+                Curve = math.min(partCount * 0.4, 4)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local side = index % 2 == 0 and 1 or -1
+                local progress = (index / total)
+                local curve = math.sin(progress * math.pi)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        side * (scale.Span * progress),
+                        scale.Curve * curve + math.sin(time + progress * 2),
+                        -progress * 4
+                    ),
+                    Rotation = CFrame.Angles(
+                        side * (curve * 0.7),
+                        side * (progress * 1.2),
+                        side * (math.pi/2.5 * curve)
+                    )
+                }
+            end
+        },
+
+        ["Dragon_Aura"] = {
+            Scale = function(partCount) return {
+                Radius = math.min(partCount * 0.5, 12),
+                Height = math.min(partCount * 0.6, 8)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local height = (index / total) * scale.Height
+                local angle = (index / total) * math.pi * 8 + time
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(angle) * scale.Radius * (height/scale.Height),
+                        height - scale.Height/2,
+                        math.sin(angle) * scale.Radius * (height/scale.Height)
+                    ),
+                    Rotation = CFrame.Angles(time, angle, time * 0.5)
+                }
+            end
+        },
+
+        ["Death_Crown"] = {
+            Scale = function(partCount) return {
+                Size = math.min(partCount * 0.3, 5),
+                Points = math.min(partCount * 0.4, 6)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local angle = (index / total) * math.pi * 2
+                local height = math.abs(math.sin(angle * scale.Points)) * scale.Size
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(angle) * scale.Size,
+                        2 + height + math.sin(time + index * 0.1),
+                        math.sin(angle) * scale.Size
+                    ),
+                    Rotation = CFrame.Angles(height * 0.5, angle, math.rad(60))
+                }
+            end
+        },
+
+        ["Void_Portal"] = {
+            Scale = function(partCount) return {
+                Radius = math.min(partCount * 0.4, 7),
+                Depth = math.min(partCount * 0.3, 4)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local angle = (index / total) * math.pi * 2
+                local spiral = angle + time
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(spiral) * scale.Radius,
+                        math.sin(spiral) * scale.Radius,
+                        math.sin(time + index * 0.1) * scale.Depth
+                    ),
+                    Rotation = CFrame.Angles(spiral, time, angle)
+                }
+            end
+        },
+
+        ["Death_Cage"] = {
+            Scale = function(partCount) return {
+                Size = math.min(partCount * 0.4, 6)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local layer = math.floor(index / 8)
+                local segment = index % 8
+                local angle = (segment / 8) * math.pi * 2
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(angle + time) * scale.Size,
+                        layer * 2 - 5,
+                        math.sin(angle + time) * scale.Size
+                    ),
+                    Rotation = CFrame.Angles(time, angle, math.pi/2)
+                }
+            end
+        },
+
+        ["Shadow_Blades"] = {
+            Scale = function(partCount) return {
+                Radius = math.min(partCount * 0.3, 5),
+                Height = math.min(partCount * 0.4, 4)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local angle = (index / total) * math.pi * 2
+                local height = math.sin(angle * 3 + time) * scale.Height
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(angle) * scale.Radius,
+                        height,
+                        math.sin(angle) * scale.Radius
+                    ),
+                    Rotation = CFrame.Angles(math.pi/2, angle + time, time)
+                }
+            end
+        },
+
+        ["Hell_Spiral"] = {
+            Scale = function(partCount) return {
+                Radius = math.min(partCount * 0.5, 8),
+                Height = math.min(partCount * 0.6, 10)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local spiral = (index / total) * math.pi * 12
+                local height = math.cos(spiral + time) * scale.Height
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(spiral) * scale.Radius * (1 - index/total),
+                        height,
+                        math.sin(spiral) * scale.Radius * (1 - index/total)
+                    ),
+                    Rotation = CFrame.Angles(spiral, time, spiral * 0.5)
+                }
+            end
+        },
+
+        ["Devil_Cross"] = {
+            Scale = function(partCount) return {
+                Size = math.min(partCount * 0.4, 6)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local section = math.floor(index / (total/4))
+                local progress = (index % (total/4)) / (total/4)
+                local wave = math.sin(time + progress * math.pi) * 0.5
+                local positions = {
+                    Vector3.new(0, scale.Size * progress, 0),
+                    Vector3.new(scale.Size * progress, 0, 0),
+                    Vector3.new(0, -scale.Size * progress, 0),
+                    Vector3.new(-scale.Size * progress, 0, 0)
+                }
+                return {
+                    Position = HRP.CFrame * CFrame.new(positions[section + 1]) * CFrame.new(0, wave, 0),
+                    Rotation = CFrame.Angles(wave, time, math.rad(90 * section))
+                }
+            end
+        },
+
+        ["Death_Ring"] = {
+            Scale = function(partCount) return {
+                Radius = math.min(partCount * 0.4, 7),
+                Spin = math.min(partCount * 0.3, 4)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local angle = (index / total) * math.pi * 2
+                local spin = time * scale.Spin
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(angle + spin) * scale.Radius,
+                        math.sin(time) * 2,
+                        math.sin(angle + spin) * scale.Radius
+                    ),
+                    Rotation = CFrame.Angles(spin, angle, spin * 0.5)
+                }
+            end
+        },
+        
+        ["Pentagram"] = {
+            Scale = function(partCount) return {
+                Size = math.min(partCount * 0.4, 5)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local points = 5
+                local angle = (index / total) * math.pi * 2
+                local starAngle = angle * points
+                local radius = scale.Size * (1 + math.sin(angle * 2 + time) * 0.2)
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(starAngle) * radius,
+                        math.sin(time) * 2,
+                        math.sin(starAngle) * radius
+                    ),
+                    Rotation = CFrame.Angles(time, starAngle, angle)
+                }
+            end
+        },
+
+        ["Blood_Ritual"] = {
+            Scale = function(partCount) return {
+                Radius = math.min(partCount * 0.5, 8)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local angle = (index / total) * math.pi * 2
+                local height = math.sin(time + index * 0.5) * 3
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(angle + time) * scale.Radius,
+                        height,
+                        math.sin(angle + time) * scale.Radius
+                    ),
+                    Rotation = CFrame.Angles(
+                        math.sin(time) * 0.5,
+                        angle + time,
+                        math.cos(time) * 0.5
+                    )
+                }
+            end
+        },
+
+
+        ["666"] = {
+            Scale = function(partCount) return {
+                Size = math.min(partCount * 0.3, 4)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local segment = index % 3
+                local number = math.floor(index / 3) % 3
+                local angle = (segment / 3) * math.pi * 2
+                local offset = number * scale.Size * 2
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        offset + math.cos(angle + time) * scale.Size,
+                        math.sin(time) * 2,
+                        math.sin(angle + time) * scale.Size
+                    ),
+                    Rotation = CFrame.Angles(time, angle, time * 0.5)
+                }
+            end
+        },
+
+        ["Quantum_Orbit"] = {
+            Scale = function(partCount) return {
+                Radius = math.min(partCount * 0.3, 6),
+                Layers = math.min(partCount * 0.2, 3)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local layer = (index % scale.Layers) / scale.Layers
+                local angle = (index / total) * math.pi * 8 + time
+                local quantum = math.sin(time * 2 + index * 0.5) * 0.5 + 0.5
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(angle) * scale.Radius * (1 + layer),
+                        math.sin(angle * 2) * scale.Radius * quantum,
+                        math.sin(angle) * scale.Radius * (1 + layer)
+                    ),
+                    Rotation = CFrame.Angles(quantum * math.pi, angle, time)
+                }
+            end
+        },
+
+        ["Celestial_Sphere"] = {
+            Scale = function(partCount) return {
+                Radius = math.min(partCount * 0.4, 9),
+                Complexity = math.min(partCount * 0.3, 5)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local phi = (index / total) * math.pi
+                local theta = (index / total) * math.pi * 2
+                local wave = math.sin(time + phi * scale.Complexity)
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.sin(phi) * math.cos(theta) * scale.Radius * wave,
+                        math.cos(phi) * scale.Radius,
+                        math.sin(phi) * math.sin(theta) * scale.Radius * wave
+                    ),
+                    Rotation = CFrame.Angles(phi, theta, time)
+                }
+            end
+        },
+
+        ["Neural_Network"] = {
+            Scale = function(partCount) return {
+                Nodes = math.min(partCount * 0.4, 8),
+                Connections = math.min(partCount * 0.3, 6)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local node = index % scale.Nodes
+                local connection = math.floor(index / scale.Nodes)
+                local pulse = math.sin(time * 3 + node * 0.7) * 2
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(node * math.pi/scale.Nodes) * scale.Connections,
+                        pulse + connection * 1.5,
+                        math.sin(node * math.pi/scale.Nodes) * scale.Connections
+                    ),
+                    Rotation = CFrame.Angles(pulse * 0.3, node * math.pi/scale.Nodes, time)
+                }
+            end
+        },
+
+        ["Time_Vortex"] = {
+            Scale = function(partCount) return {
+                Spiral = math.min(partCount * 0.5, 10),
+                TimeWarp = math.min(partCount * 0.4, 8)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local spiral = (index / total) * math.pi * 16
+                local timeDistortion = math.sin(time * 0.5 + spiral) * scale.TimeWarp
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(spiral) * (scale.Spiral - timeDistortion),
+                        spiral * 0.3,
+                        math.sin(spiral) * (scale.Spiral - timeDistortion)
+                    ),
+                    Rotation = CFrame.Angles(spiral * 0.2, time * 2, spiral * 0.1)
+                }
+            end
+        },
+
+        ["Crystal_Cluster"] = {
+            Scale = function(partCount) return {
+                Base = math.min(partCount * 0.3, 5),
+                Crystals = math.min(partCount * 0.4, 7)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local crystal = index % scale.Crystals
+                local layer = math.floor(index / scale.Crystals)
+                local facet = (crystal / scale.Crystals) * math.pi * 2
+                local growth = math.sin(time + crystal * 0.8) * layer
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(facet) * (scale.Base + growth),
+                        layer * 1.5 + math.cos(time + facet) * 0.5,
+                        math.sin(facet) * (scale.Base + growth)
+                    ),
+                    Rotation = CFrame.Angles(
+                        facet * 0.5,
+                        time + facet,
+                        math.rad(60) + growth * 0.2
+                    )
+                }
+            end
+        },
+
+        ["Hologram_Grid"] = {
+            Scale = function(partCount) return {
+                GridSize = math.min(partCount * 0.3, 6),
+                Resolution = math.min(partCount * 0.2, 4)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local x = (index % scale.Resolution) - scale.Resolution/2
+                local z = math.floor(index / scale.Resolution) % scale.Resolution - scale.Resolution/2
+                local y = math.floor(index / (scale.Resolution * scale.Resolution))
+                local pulse = math.sin(time + x * z * 0.1) * 2
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        x * scale.GridSize,
+                        y * 2 + pulse,
+                        z * scale.GridSize
+                    ),
+                    Rotation = CFrame.Angles(
+                        math.rad(90) * (y % 3),
+                        time + x * 0.5,
+                        pulse * 0.3
+                    )
+                }
+            end
+        },
+
+        ["Solar_System"] = {
+            Scale = function(partCount) return {
+                Orbits = math.min(partCount * 0.3, 5),
+                SystemSize = math.min(partCount * 0.5, 12)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local orbit = index % scale.Orbits
+                local planet = math.floor(index / scale.Orbits)
+                local orbitRadius = (orbit + 1) * (scale.SystemSize / scale.Orbits)
+                local planetAngle = (planet / (total/scale.Orbits)) * math.pi * 2 + time / (orbit + 1)
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(planetAngle) * orbitRadius,
+                        math.sin(time * 0.7 + orbit) * 2,
+                        math.sin(planetAngle) * orbitRadius
+                    ),
+                    Rotation = CFrame.Angles(
+                        planetAngle * 0.5,
+                        time / (orbit + 1),
+                        math.rad(orbit * 30)
+                    )
+                }
+            end
+        },
+
+        ["DNA_Helix"] = {
+            Scale = function(partCount) return {
+                Height = math.min(partCount * 0.6, 15),
+                HelixRadius = math.min(partCount * 0.3, 4)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local height = (index / total) * scale.Height - scale.Height/2
+                local angle = height * math.pi * 2 + time
+                local side = index % 2 == 0 and 1 or -1
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(angle) * scale.HelixRadius * side,
+                        height,
+                        math.sin(angle) * scale.HelixRadius * side
+                    ),
+                    Rotation = CFrame.Angles(
+                        angle,
+                        height * 0.5,
+                        math.rad(90) * side
+                    )
+                }
+            end
+        },
+
+        ["Magnetic_Field"] = {
+            Scale = function(partCount) return {
+                FieldSize = math.min(partCount * 0.4, 8),
+                Poles = math.min(partCount * 0.3, 4)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local pole = index % (scale.Poles * 2)
+                local line = math.floor(index / (scale.Poles * 2))
+                local isNorth = pole < scale.Poles
+                local poleAngle = (pole % scale.Poles) / scale.Poles * math.pi * 2
+                local fieldStrength = math.sin(time + line * 0.5) * 3
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(poleAngle) * scale.FieldSize,
+                        (isNorth and 1 or -1) * fieldStrength,
+                        math.sin(poleAngle) * scale.FieldSize
+                    ),
+                    Rotation = CFrame.Angles(
+                        poleAngle,
+                        time,
+                        (isNorth and math.pi or 0)
+                    )
+                }
+            end
+        },
+
+        ["Chaos_Theory"] = {
+            Scale = function(partCount) return {
+                Chaos = math.min(partCount * 0.5, 10),
+                Order = math.min(partCount * 0.2, 3)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local x = math.sin(time * 0.1 + index * 0.01) * scale.Chaos
+                local y = math.cos(time * 0.13 + index * 0.02) * scale.Chaos
+                local z = math.sin(time * 0.17 + index * 0.03) * scale.Order
+                return {
+                    Position = HRP.CFrame * CFrame.new(x, y, z),
+                    Rotation = CFrame.Angles(
+                        x * 0.1,
+                        y * 0.1,
+                        z * 0.1
+                    )
+                }
+            end
+        },
+
+        ["Binary_Code"] = {
+            Scale = function(partCount) return {
+                Bits = math.min(partCount * 0.3, 6),
+                StreamLength = math.min(partCount * 0.4, 8)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local bitPos = index % scale.Bits
+                local streamPos = math.floor(index / scale.Bits)
+                local bitValue = (streamPos + bitPos) % 2
+                local pulse = math.sin(time * 5 + streamPos * 0.5) * bitValue
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        bitPos * 2 - scale.Bits,
+                        pulse * 2,
+                        streamPos * 1.5 - scale.StreamLength/2
+                    ),
+                    Rotation = CFrame.Angles(
+                        math.rad(90) * bitValue,
+                        time,
+                        pulse * 0.5
+                    )
+                }
+            end
+        },
+         ["Tornado"] = {
+             Scale = function(partCount) return {
+                 Height = math.min(partCount * 2, 50),
+                 BaseRadius = math.min(partCount * 1.5, 25),
+                 TopRadius = math.min(partCount * 0.5, 8),
+                 RotationSpeed = math.min(partCount * 0.1, 3)
+             } end,
+             Formation = function(part, data, index, total, scale)
+                 local time = tick() * AttachmentSystem.AnimationSpeed
+                 local heightRatio = (index / total)
+                 local currentRadius = scale.BaseRadius * (1 - heightRatio * 0.7)
+                 local rotationAngle = time * scale.RotationSpeed * (1 + heightRatio * 2)
+                 local spiralTightness = 2
+                 local verticalOffset = heightRatio * scale.Height
+                 local horizontalWobble = math.sin(time * 0.5 + heightRatio * 8) * 2
+                 local spiralProgress = (index / total) * spiralTightness * math.pi * 2
+                 local x = math.cos(rotationAngle + spiralProgress) * currentRadius
+                 local z = math.sin(rotationAngle + spiralProgress) * currentRadius
+                 local y = verticalOffset - scale.Height/2
+                 local groundEffect = 0
+                 if heightRatio < 0.2 then
+                     groundEffect = math.sin(time * 3 + index) * (0.2 - heightRatio) * 10
+                 end
+                 local funnelTaper = math.pow(heightRatio, 1.5) * 3
+                 x = x * (1 - funnelTaper)
+                 z = z * (1 - funnelTaper)
+                 local partRotation = CFrame.Angles(
+                     math.rad(45) + math.sin(time + heightRatio) * 0.3,
+                     rotationAngle + spiralProgress,
+                     math.rad(90) + math.cos(time * 2 + index) * 0.5
+                 )
+                 
+                 return {
+                     Position = HRP.CFrame * CFrame.new(
+                         x + horizontalWobble,
+                         y + groundEffect,
+                         z + horizontalWobble
+                     ),
+                     Rotation = partRotation
+                 }
+             end
+         },
+         ["Super_Tornado"] = {
+             Scale = function(partCount) return {
+                 Height = math.min(partCount * 3, 80),
+                 BaseRadius = math.min(partCount * 2, 40),
+                 TopRadius = math.min(partCount * 0.8, 15),
+                 RotationSpeed = math.min(partCount * 0.15, 5),
+                 Turbulence = math.min(partCount * 0.2, 8)
+             } end,
+             Formation = function(part, data, index, total, scale)
+                 local time = tick() * AttachmentSystem.AnimationSpeed
+                 local heightRatio = (index / total)
+                 local currentRadius = scale.BaseRadius * (1 - heightRatio * 0.6)
+                 local rotationAngle = time * scale.RotationSpeed * (1 + heightRatio * 3)
+                 local spiralArms = 3
+                 local arm = index % spiralArms
+                 local spiralProgress = (index / total) * 8 * math.pi * 2 + (arm / spiralArms) * math.pi * 2
+                 local turbulence = math.sin(time * 2 + index * 0.1) * scale.Turbulence
+                 local verticalTurbulence = math.cos(time * 1.5 + index * 0.05) * scale.Turbulence * 0.5
+                 local x = math.cos(rotationAngle + spiralProgress) * currentRadius
+                 local z = math.sin(rotationAngle + spiralProgress) * currentRadius
+                 local y = heightRatio * scale.Height - scale.Height/2
+                 local groundRumble = 0
+                 if heightRatio < 0.3 then
+                     groundRumble = math.sin(time * 4 + index * 0.5) * (0.3 - heightRatio) * 15
+                 end
+                 local secondaryVortex = math.sin(time * 3 + heightRatio * 10) * currentRadius * 0.3
+                 local partRotation = CFrame.Angles(
+                     math.rad(60) + math.sin(time * 2 + heightRatio) * 0.5,
+                     rotationAngle + spiralProgress * 2,
+                     math.rad(120) + math.cos(time * 3 + index) * 1.0
+                 )
+                 
+                 return {
+                     Position = HRP.CFrame * CFrame.new(
+                         x + turbulence + secondaryVortex,
+                         y + groundRumble + verticalTurbulence,
+                         z + turbulence
+                     ),
+                     Rotation = partRotation
+                 }
+             end
+         },
+         ["Water_Spout"] = {
+             Scale = function(partCount) return {
+                 Height = math.min(partCount * 1.8, 35),
+                 BaseRadius = math.min(partCount * 1.2, 20),
+                 RotationSpeed = math.min(partCount * 0.08, 2),
+                 WaveEffect = math.min(partCount * 0.3, 6)
+             } end,
+             Formation = function(part, data, index, total, scale)
+                 local time = tick() * AttachmentSystem.AnimationSpeed
+                 local heightRatio = (index / total)
+                 local currentRadius = scale.BaseRadius * (1 - heightRatio * 0.8)
+                 local rotationAngle = time * scale.RotationSpeed
+                 local wave = math.sin(time * 1.5 + heightRatio * 12) * scale.WaveEffect
+                 local spiralProgress = (index / total) * 4 * math.pi * 2
+                 local x = math.cos(rotationAngle + spiralProgress) * (currentRadius + wave)
+                 local z = math.sin(rotationAngle + spiralProgress) * (currentRadius + wave)
+                 local y = heightRatio * scale.Height - scale.Height/2
+                 local spray = 0
+                 if heightRatio < 0.25 then
+                     spray = math.cos(time * 2 + index) * (0.25 - heightRatio) * 8
+                 end
+                 local partRotation = CFrame.Angles(
+                     math.rad(30) + math.sin(time + heightRatio * 5) * 0.2,
+                     rotationAngle + spiralProgress,
+                     math.rad(45) + wave * 0.1
+                 )
+                 
+                 return {
+                     Position = HRP.CFrame * CFrame.new(
+                         x,
+                         y + spray,
+                         z
+                     ),
+                     Rotation = partRotation
+                 }
+             end
+         },
+         ["Fire_Tornado"] = {
+             Scale = function(partCount) return {
+                 Height = math.min(partCount * 2.2, 45),
+                 BaseRadius = math.min(partCount * 1.3, 22),
+                 RotationSpeed = math.min(partCount * 0.12, 4),
+                 FlameFlicker = math.min(partCount * 0.4, 10)
+             } end,
+             Formation = function(part, data, index, total, scale)
+                 local time = tick() * AttachmentSystem.AnimationSpeed
+                 local heightRatio = (index / total)
+                 local currentRadius = scale.BaseRadius * (1 - heightRatio * 0.65)
+                 local rotationAngle = time * scale.RotationSpeed * (1 + heightRatio)
+                 local flicker = math.random() * scale.FlameFlicker
+                 local spiralProgress = (index / total) * 6 * math.pi * 2
+                 local fireChaos = math.sin(time * 4 + index * 0.2) * flicker * 0.3
+                 local verticalChaos = math.cos(time * 3 + index * 0.1) * flicker * 0.2
+                 local x = math.cos(rotationAngle + spiralProgress) * currentRadius
+                 local z = math.sin(rotationAngle + spiralProgress) * currentRadius
+                 local y = heightRatio * scale.Height - scale.Height/2
+                 local emberFloat = math.sin(time * 5 + index) * (1 - heightRatio) * 4
+                 local partRotation = CFrame.Angles(
+                     math.rad(35) + math.sin(time * 2 + index) * 0.4,
+                     rotationAngle + spiralProgress + fireChaos,
+                     math.rad(75) + math.cos(time * 3 + index) * 0.6
+                 )
+                 
+                 return {
+                     Position = HRP.CFrame * CFrame.new(
+                         x + fireChaos,
+                         y + emberFloat + verticalChaos,
+                         z + fireChaos
+                     ),
+                     Rotation = partRotation
+                 }
+             end
+         },
+        ["Gravity_Well"] = {
+            Scale = function(partCount) return {
+                WellDepth = math.min(partCount * 0.4, 7),
+                EventHorizon = math.min(partCount * 0.3, 5)
+            } end,
+            Formation = function(part, data, index, total, scale)
+                local time = tick() * AttachmentSystem.AnimationSpeed
+                local angle = (index / total) * math.pi * 2
+                local distance = (index / total) * scale.EventHorizon
+                local warp = 1 / (distance + 0.1) * scale.WellDepth
+                return {
+                    Position = HRP.CFrame * CFrame.new(
+                        math.cos(angle) * distance,
+                        math.sin(time * 2) * warp,
+                        math.sin(angle) * distance
+                    ),
+                    Rotation = CFrame.Angles(
+                        warp * 0.3,
+                        angle + time,
+                        math.rad(180) * (distance / scale.EventHorizon)
+                    )
+                }
+            end
+        }
+    }
+
+    function AttachmentSystem:ProcessPart(part)
+        if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(Character) then
+            part.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0, 0, 0, 0)
+            part.CanCollide = false
+            
+            local attachment = Instance.new("Attachment")
+            attachment.Parent = part
+            
+            local alignPos = Instance.new("AlignPosition")
+            alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+            alignPos.Attachment0 = attachment
+            alignPos.MaxForce = 1e6
+            alignPos.MaxVelocity = 1e6
+            alignPos.Responsiveness = 200
+            alignPos.Parent = part
+            
+            local alignOri = Instance.new("AlignOrientation")
+            alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
+            alignOri.Attachment0 = attachment
+            alignOri.MaxTorque = 1e6
+            alignOri.Responsiveness = 200
+            alignOri.Parent = part
+            
+            self.Parts[part] = {
+                Attachment = attachment,
+                AlignPosition = alignPos,
+                AlignOrientation = alignOri,
+                Size = part.Size
+            }
+        end
+    end
+
+    function AttachmentSystem:ReleaseAllParts()
+        for part, data in pairs(self.Parts) do
+            if part and part.Parent then
+                if data.AlignPosition then
+                    data.AlignPosition:Destroy()
+                end
+                if data.AlignOrientation then
+                    data.AlignOrientation:Destroy()
+                end
+                if data.Attachment then
+                    data.Attachment:Destroy()
+                end
+                
+                part.CustomPhysicalProperties = nil
+                part.CanCollide = true
+            end
+        end
+        self.Parts = {}
+    end
+
+    function AttachmentSystem:CleanupParts()
+        for part, data in pairs(self.Parts) do
+            if not part or not part.Parent then
+                self.Parts[part] = nil
+            end
+        end
+    end
+
+    local PartControlToggle = Tab:Toggle({
+        Title = "Enable Part Control",
+        Desc = "Toggle part control system",
+        Value = false,
+        Callback = function(v)
+            togglesound()
+            AttachmentSystem.Enabled = v
+            if v then
+                for _, part in ipairs(workspace:GetDescendants()) do
+                    AttachmentSystem:ProcessPart(part)
+                end
+            else
+                AttachmentSystem:ReleaseAllParts()
+            end
+        end
+    })
+
+    local RadiusSlider = Tab:Slider({
+        Title = "Size",
+        Desc = "Change part Size",
+        Min = 10,
+        Max = 100,
+        Rounding = 0,
+        Value = 50,
+        Callback = function(val)
+            slidersound()
+            AttachmentSystem.ScaleFactor = val / 50
+        end
+    })
+
+    local ModeDropdown = Tab:Dropdown({
+        Title = "Pattern",
+        List = {
+            "Angel_Wings", "Demon_Wings", "Dragon_Aura", "Death_Crown", "Void_Portal", 
+            "Death_Cage", "Shadow_Blades", "Hell_Spiral", "Devil_Cross", "Death_Ring", 
+            "Pentagram", "Blood_Ritual", "666",
+            "Quantum_Orbit", "Celestial_Sphere", "Neural_Network", "Time_Vortex", 
+            "Crystal_Cluster", "Hologram_Grid", "Solar_System", "DNA_Helix", 
+            "Magnetic_Field", "Chaos_Theory", "Binary_Code", "Gravity_Well",
+            "Tornado", "Super_Tornado", "Water_Spout", "Fire_Tornado"
+        },
+        Value = "Angel_Wings",
+        Callback = function(mode)
+            dropdownsound()
+            AttachmentSystem.CurrentMode = mode
+        end
+    })
+
+    local AutoSizeToggle = Tab:Toggle({
+        Title = "Auto Size",
+        Desc = "Automatically scale parts",
+        Value = true,
+        Callback = function(v)
+            togglesound()
+            AttachmentSystem.AutoSize = v
+            if v then
+                print("Auto Size: Enabled")
+            else
+                print("Auto Size: Disabled")
+            end
+        end
+    })
+
+    local heartbeatConnection
+    heartbeatConnection = RunService.Heartbeat:Connect(function()
+        AttachmentSystem:CleanupParts()
+        
+        if AttachmentSystem.Enabled and AttachmentSystem.CurrentMode ~= "None" then
+            local mode = AttachmentModes[AttachmentSystem.CurrentMode]
+            if mode then
+                local partCount = 0
+                for _ in pairs(AttachmentSystem.Parts) do partCount = partCount + 1 end
+                
+                local scale = mode.Scale(partCount)
+                local index = 0
+                
+                for part, data in pairs(AttachmentSystem.Parts) do
+                    if part and part.Parent then
+                        local formation = mode.Formation(part, data, index, partCount, scale)
+                        
+                        data.AlignPosition.Position = formation.Position.Position
+                        data.AlignOrientation.CFrame = formation.Position * formation.Rotation
+                        
+                        if AttachmentSystem.AutoSize then
+                            part.Size = data.Size * AttachmentSystem.ScaleFactor
+                        end
+                        
+                        if AttachmentSystem.NoCollision then
+                            part.CanCollide = false
+                        end
+                        
+                        index = index + 1
+                    else
+                        AttachmentSystem.Parts[part] = nil
+                    end
+                end
+            end
+        end
+    end)
+
+    if AttachmentSystem.Enabled then
+        for _, part in ipairs(workspace:GetDescendants()) do
+            AttachmentSystem:ProcessPart(part)
+        end
+    end
+
+    workspace.DescendantAdded:Connect(function(part)
+        if AttachmentSystem.Enabled then
+            AttachmentSystem:ProcessPart(part)
+        end
+    end)
+
+end
+
 local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
 
     Tab:Button({
@@ -3302,6 +4380,25 @@ local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
         end
     })
 end
+
+local Tab = Window:Tab({Title = "credits", Icon = "code"}) do
+
+    Tab:Label({
+        Title = "Brick",
+        Desc = "I might've forgot some users to credit you can go to my yt channel to comment out\n@GPSls",
+    })
+
+    Tab:Label({
+        Title = "Lukas_hub",
+        Desc = "he made superring or.. it could be yumm",
+    })
+
+    Tab:Label({
+        Title = "V0C0N",
+        Desc = "he made part control thingamabob he also has a beef with skids",
+    })
+end
+
 Window:Notify({
     Title = "script made by @hmmm5650",
     Desc = "Enter Text... (ಠ⁠ ͜⁠ʖ⁠ ⁠ಠ)",
