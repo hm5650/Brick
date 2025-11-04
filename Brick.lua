@@ -4382,7 +4382,7 @@ local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
 end
 
 local Tab = Window:Tab({Title = "credits", Icon = "code"}) do
-
+    Tab:Section({Title = "Script Made By @hmmm5651"})
     Tab:Label({
         Title = "Brick",
         Desc = "I might've forgot some users to credit you can go to my yt channel to comment out\n@GPSls",
