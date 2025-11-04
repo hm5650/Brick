@@ -97,7 +97,7 @@ local RANDOM_SEED_SCALE = 7.3
 local GRAVITY_MULTIPLIER = 1.5
 local INITIAL_BOOST = 10
 local MAX_SPEED = 20
-local SIMULATION_RADIUS = 5000
+local SIMULATION_RADIUS = 1000
 local ringParts = {}
 local radius = 50
 local speed = 2
@@ -107,12 +107,12 @@ local UPDATE_INTERVAL = 0
 local lastUpdate = tick()
 local currentMode = 2
 local orbitEnabled = false
-local farness = 1
+local farness = 50
 local height = 1
 local fast = 555
 local targetplr = "me"
 local angle = 1
-local radius = 0
+local bhradius = 0
 local angleSpeed = 10
 local blackHoleActive = false
 local getpart = 5000
@@ -183,6 +183,7 @@ function pcz()
     pcall(function()
         sethiddenproperty(player, "SimulationRadius", getpart)
         sethiddenproperty(player, "MaxSimulationRadius", getpart)
+        sethiddenproperty(player, "MaximumSimulationRadius", getpart)
     end)
     if heartbeatConnection then 
         heartbeatConnection:Disconnect() 
@@ -2519,8 +2520,8 @@ local function toggleBlackHole()
             if humanoidRootPart and humanoidRootPart.Parent then
                 angle = angle + math.rad(angleSpeed)
                 
-                local offsetX = math.cos(angle) * radius
-                local offsetZ = math.sin(angle) * radius
+                local offsetX = math.cos(angle) * bhradius
+                local offsetZ = math.sin(angle) * bhradius
 
                 Attachment1.WorldCFrame = humanoidRootPart.CFrame * CFrame.new(offsetX, 0, offsetZ)
             else
@@ -2572,7 +2573,7 @@ LocalPlayer.CharacterAdded:Connect(function()
         if blackHoleActive then
             local wasActive = blackHoleActive
             blackHoleActive = false
-            releaseAllParts() -- Clean up first
+            releaseAllParts()
             if wasActive then
                 toggleBlackHole()
             end
@@ -2611,7 +2612,7 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "moon"}) do
         Value = 0,
         Callback = function(val)
             slidersound()
-            radius = val
+            bhradius = val
         end
     })
 
@@ -2633,9 +2634,9 @@ Players.PlayerRemoving:Connect(function(player)
         currentTargetPlayer = LocalPlayer
         if blackHoleActive then
             local wasActive = blackHoleActive
-            toggleBlackHole() -- Turn off
+            toggleBlackHole()
             if wasActive then
-                toggleBlackHole() -- Turn back on with local player
+                toggleBlackHole()
             end
         end
     end
