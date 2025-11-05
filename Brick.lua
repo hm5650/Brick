@@ -318,7 +318,7 @@ function pcz()
         
         local processed = 0
         local partsToRemove = {}
-        local maxProcessPerFrame = 35
+        local maxProcessPerFrame = 20
         
         for part, data in pairs(claimedParts) do
             if processed >= maxProcessPerFrame then
