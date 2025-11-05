@@ -250,7 +250,7 @@ function pcz()
     
     local parts = workspace:GetPartBoundsInRadius(center, getpart)
     local partsProcessed = 0
-    local maxPartsPerFrame = 45
+    local maxPartsPerFrame = 25
     
     for i, part in ipairs(parts) do
         if partsProcessed >= maxPartsPerFrame then
@@ -299,7 +299,7 @@ function pcz()
     end
     
     local lastProcessTime = 0
-    local processInterval = 0.06
+    local processInterval = 0.5
     
     heartbeatConnection = RunService.Heartbeat:Connect(function()
         local currentTime = tick()
@@ -318,7 +318,7 @@ function pcz()
         
         local processed = 0
         local partsToRemove = {}
-        local maxProcessPerFrame = 25
+        local maxProcessPerFrame = 16
         
         for part, data in pairs(claimedParts) do
             if processed >= maxProcessPerFrame then
