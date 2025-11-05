@@ -243,7 +243,7 @@ function pcz()
     
     local startTime = tick()
     local partsProcessed = 0
-    local maxPartsPerFrame = 45
+    local maxPartsPerFrame = 69
     
     local character = player.Character
     local center = character and character:FindFirstChild("HumanoidRootPart") and character.HumanoidRootPart.Position or Vector3.new(0, 0, 0)
@@ -296,7 +296,7 @@ function pcz()
     end
     
     local lastProcessTime = 0
-    local processInterval = 0.09
+    local processInterval = 0.03
     
     heartbeatConnection = RunService.Heartbeat:Connect(function()
         pcall(function()
@@ -2606,7 +2606,7 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
     Tab:Section({Title = ""})
     Tab:Button({
         Title = "Summon Black Hole",
-        Desc = "Create a black sphere that sucks up unanchored parts",
+        Desc = "Create a blackhole in the sky that sucks up unanchored parts",
         Callback = function()
             btnclick()
             pcz()
@@ -4489,21 +4489,6 @@ local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
         end
     })
 
-    local AutoSizeToggle = Tab:Toggle({
-        Title = "Auto Size",
-        Desc = "Automatically scale parts",
-        Value = true,
-        Callback = function(v)
-            togglesound()
-            AttachmentSystem.AutoSize = v
-            if v then
-                print("Auto Size: Enabled")
-            else
-                print("Auto Size: Disabled")
-            end
-        end
-    })
-
     local heartbeatConnection
     heartbeatConnection = RunService.Heartbeat:Connect(function()
         AttachmentSystem:CleanupParts()
@@ -4552,7 +4537,6 @@ local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
             AttachmentSystem:ProcessPart(part)
         end
     end)
-
 end
 
 local Tab = Window:Tab({Title = "other", Icon = "folder"}) do
