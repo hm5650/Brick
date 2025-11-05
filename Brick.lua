@@ -198,6 +198,7 @@ local modes = {
     "Lissajous",
     "Polygonal Orbit"
 }
+
 function pcz()
     pcall(function()
         sethiddenproperty(player, "SimulationRadius", getpart)
@@ -228,27 +229,28 @@ function pcz()
         connection:Disconnect() 
         connection = nil
     end
+
+    local targetFPS = 60
+    local frameTime = 1 / targetFPS
+    local lastFrameTime = tick()
     
     local function setupRespawnHandler()
         if player.Character then
             player.Character:WaitForChild("Humanoid").Died:Connect(function()
-                -- Small delay to ensure character is fully respawned
                 task.wait(2)
-                pcz() -- Re-run part claiming
+                pcz()
             end)
         end
     end
     
     setupRespawnHandler()
     
-    local startTime = tick()
-    local partsProcessed = 0
-    local maxPartsPerFrame = 69
-    
     local character = player.Character
     local center = character and character:FindFirstChild("HumanoidRootPart") and character.HumanoidRootPart.Position or Vector3.new(0, 0, 0)
     
     local parts = workspace:GetPartBoundsInRadius(center, getpart)
+    local partsProcessed = 0
+    local maxPartsPerFrame = 45
     
     for i, part in ipairs(parts) do
         if partsProcessed >= maxPartsPerFrame then
@@ -265,62 +267,66 @@ function pcz()
                 
                 pcall(function()
                     part.CanCollide = false
-                    part.Massless = true -- Make part massless
-                    part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001) -- Even lower values
+                    part.Massless = true
+                    part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
+                    
                     local success = pcall(function()
                         part:SetNetworkOwner(player)
                     end)
+                    
                     if not success then
                         pcall(function()
                             sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
                         end)
                     end
+                    
                     for _, child in ipairs(part:GetChildren()) do
                         if child:IsA("Constraint") or child:IsA("BodyMover") then
                             child:Destroy()
                         end
                     end
-                    
-                    -- Force physics update
-                    part:GetPropertyChangedSignal("Velocity"):Fire()
-                    part:GetPropertyChangedSignal("RotVelocity"):Fire()
                 end)
                 
                 partsProcessed = partsProcessed + 1
             end
         end
         
-        if i % 50 == 0 then
+        local currentTime = tick()
+        if currentTime - lastFrameTime >= frameTime then
             RunService.Heartbeat:Wait()
+            lastFrameTime = tick()
         end
     end
     
     local lastProcessTime = 0
-    local processInterval = 0.03
+    local processInterval = 0.06
     
     heartbeatConnection = RunService.Heartbeat:Connect(function()
-        pcall(function()
-            sethiddenproperty(player, "SimulationRadius", getpart)
-            sethiddenproperty(player, "MaxSimulationRadius", getpart)
-        end)
-        
         local currentTime = tick()
-        if currentTime - lastProcessTime < processInterval then
+        if currentTime - lastFrameTime < frameTime then
             return
         end
-        lastProcessTime = currentTime
+        lastFrameTime = currentTime
+        
+        if currentTime - lastProcessTime >= processInterval then
+            pcall(function()
+                sethiddenproperty(player, "SimulationRadius", getpart)
+                sethiddenproperty(player, "MaxSimulationRadius", getpart)
+            end)
+            lastProcessTime = currentTime
+        end
         
         local processed = 0
         local partsToRemove = {}
+        local maxProcessPerFrame = 25
         
         for part, data in pairs(claimedParts) do
-            if processed >= 40 then -- Increased processing per frame
+            if processed >= maxProcessPerFrame then
                 break
             end
             
             if part and part.Parent then
                 pcall(function()
-                    -- Enhanced network ownership maintenance
                     local owner = part:GetNetworkOwner()
                     if owner ~= player then
                         local success = pcall(function()
@@ -334,14 +340,16 @@ function pcz()
                         end
                     end
                     
-                    -- Maintain part properties
                     part.CanCollide = false
                     part.Massless = true
                     part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
                     
-                    -- Zero out velocities for better control
-                    part.Velocity = Vector3.zero
-                    part.RotVelocity = Vector3.zero
+                    if part.Velocity.Magnitude > 0.1 then
+                        part.Velocity = Vector3.zero
+                    end
+                    if part.RotVelocity.Magnitude > 0.1 then
+                        part.RotVelocity = Vector3.zero
+                    end
                     
                     processed = processed + 1
                 end)
@@ -357,7 +365,7 @@ function pcz()
     
     connection = Workspace.DescendantAdded:Connect(function(part)
         if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
-            task.delay(0.05, function() -- Reduced delay for faster claiming
+            task.delay(0.1, function()
                 if not claimedParts[part] then
                     claimedParts[part] = {
                         CanCollide = part.CanCollide,
@@ -384,12 +392,18 @@ function pcz()
             end)
         end
     end)
+    
     player.CharacterAdded:Connect(function(character)
-        task.wait(1)
+        task.wait(1.5)
         pcz()
     end)
 end
 
+Window:Notify({
+    Title = "Brick",
+    Desc = "PartClaim Enabled",
+    Time = 5
+})
 local function fly()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/F/refs/heads/main/F", true))()
 end
@@ -583,7 +597,6 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Desc = "Walk through walls",
         Value = false,
         Callback = function(v)
-            togglesound()
             noclipEnabled = v
             local character = LocalPlayer.Character
             
@@ -623,6 +636,7 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
                     end
                 end
             end
+            togglesound()
         end
     })
 
@@ -642,7 +656,6 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Desc = "Jump infinitely in the air",
         Value = false,
         Callback = function(v)
-            togglesound()
             infJumpEnabled = v
             
             if v then
@@ -660,6 +673,7 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
                     jumpConnection = nil
                 end
             end
+            togglesound()
         end
     })
 end
@@ -1606,6 +1620,7 @@ function toggleorbit()
     orbitEnabled = not orbitEnabled
 end
 
+
 RunService.Heartbeat:Connect(function()
     if not orbitEnabled then return end
     if not TargetPlayer then return end
@@ -2091,6 +2106,7 @@ local function meme()
     return zzz
 end
 
+
 local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
     -- Section
     Tab:Section({Title = "Orbit Modification"})
@@ -2254,6 +2270,11 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Callback = function()
             btnclick()
             rpp()
+            Window:Notify({
+                Title = "Brick",
+                Desc = "Why do u need a gui",
+                Time = 5
+            })
         end
     })
 end
@@ -3141,13 +3162,13 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Desc = "omg floating parts",  
         Value = false,  
         Callback = function(v)  
-            togglesound()
             if v then
                 GravOn()
                 pcz()
             else
                 GravOff()
             end
+            togglesound()
         end  
     })
     Tab:Section({Title = ""})
@@ -3156,13 +3177,13 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Desc = "my wig D:",  
         Value = false,  
         Callback = function(v)  
-            togglesound()
             if v then
                 WindOn()
                 pcz()
             else
                 WindOff()
             end
+            togglesound()
         end  
     })
 
@@ -3256,7 +3277,6 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Desc = "woah",
         Value = false,
         Callback = function(v)
-            togglesound()
             if v then
                 cb = "tornado"
                 scanParts()
@@ -3265,6 +3285,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
                 cb = nil
                 stopPartControl()
             end
+            togglesound()
         end
     })
 
@@ -3319,7 +3340,6 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Desc = "Attract or repel parts or smth",
         Value = false,
         Callback = function(v)
-            togglesound()
             startt = v
             if v then
                 magnetConnection = RunService.Heartbeat:Connect(function()
@@ -3370,6 +3390,7 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
                 mag = {}
             end
             pcz()
+            togglesound()
         end
     })
 
@@ -3563,7 +3584,7 @@ end
 local function SetupTpuaNetwork()
     settings().Physics.AllowSleep = false
     settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.Disabled
-    
+    settings().Rendering.QualityLevel = 1
     if not getgenv().TpuaNetworkBypass then
         getgenv().TpuaNetworkBypass = true
         local old
@@ -4446,7 +4467,6 @@ local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
         Desc = "Toggle part control system",
         Value = false,
         Callback = function(v)
-            togglesound()
             AttachmentSystem.Enabled = v
             if v then
                 for _, part in ipairs(workspace:GetDescendants()) do
@@ -4455,6 +4475,7 @@ local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
             else
                 AttachmentSystem:ReleaseAllParts()
             end
+            togglesound()
         end
     })
 
