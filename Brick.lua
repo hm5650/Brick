@@ -115,7 +115,7 @@ local angle = 1
 local bhradius = 0
 local angleSpeed = 10
 local blackHoleActive = false
-local getpart = 5000
+local getpart = 1000
 local networkown = {}
 local cb = nil
 local ts = 10
@@ -198,13 +198,27 @@ local modes = {
     "Lissajous",
     "Polygonal Orbit"
 }
-
 function pcz()
     pcall(function()
         sethiddenproperty(player, "SimulationRadius", getpart)
         sethiddenproperty(player, "MaxSimulationRadius", getpart)
         sethiddenproperty(player, "MaximumSimulationRadius", getpart)
+        if game:GetService("NetworkClient") then
+            game:GetService("NetworkClient"):SetOutgoingKBPSLimit(math.huge)
+        end
+        local mt = getrawmetatable(game)
+        if mt and setreadonly then
+            setreadonly(mt, false)
+            local oldIndex = mt.__index
+            mt.__index = newcclosure(function(self, key)
+                if key == "NetworkOwnership" then
+                    return Enum.NetworkOwnership.Manual
+                end
+                return oldIndex(self, key)
+            end)
+        end
     end)
+    
     if heartbeatConnection then 
         heartbeatConnection:Disconnect() 
         heartbeatConnection = nil
@@ -214,9 +228,22 @@ function pcz()
         connection:Disconnect() 
         connection = nil
     end
+    
+    local function setupRespawnHandler()
+        if player.Character then
+            player.Character:WaitForChild("Humanoid").Died:Connect(function()
+                -- Small delay to ensure character is fully respawned
+                task.wait(2)
+                pcz() -- Re-run part claiming
+            end)
+        end
+    end
+    
+    setupRespawnHandler()
+    
     local startTime = tick()
     local partsProcessed = 0
-    local maxPartsPerFrame = 30
+    local maxPartsPerFrame = 45
     
     local character = player.Character
     local center = character and character:FindFirstChild("HumanoidRootPart") and character.HumanoidRootPart.Position or Vector3.new(0, 0, 0)
@@ -232,13 +259,31 @@ function pcz()
             if not claimedParts[part] then
                 claimedParts[part] = {
                     CanCollide = part.CanCollide,
-                    claimed = true
+                    claimed = true,
+                    OriginalMassless = part.Massless
                 }
                 
                 pcall(function()
                     part.CanCollide = false
-                    part.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01)
-                    part:SetNetworkOwner(player)
+                    part.Massless = true -- Make part massless
+                    part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001) -- Even lower values
+                    local success = pcall(function()
+                        part:SetNetworkOwner(player)
+                    end)
+                    if not success then
+                        pcall(function()
+                            sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
+                        end)
+                    end
+                    for _, child in ipairs(part:GetChildren()) do
+                        if child:IsA("Constraint") or child:IsA("BodyMover") then
+                            child:Destroy()
+                        end
+                    end
+                    
+                    -- Force physics update
+                    part:GetPropertyChangedSignal("Velocity"):Fire()
+                    part:GetPropertyChangedSignal("RotVelocity"):Fire()
                 end)
                 
                 partsProcessed = partsProcessed + 1
@@ -251,11 +296,12 @@ function pcz()
     end
     
     local lastProcessTime = 0
-    local processInterval = 0.1
+    local processInterval = 0.09
     
     heartbeatConnection = RunService.Heartbeat:Connect(function()
         pcall(function()
             sethiddenproperty(player, "SimulationRadius", getpart)
+            sethiddenproperty(player, "MaxSimulationRadius", getpart)
         end)
         
         local currentTime = tick()
@@ -268,18 +314,37 @@ function pcz()
         local partsToRemove = {}
         
         for part, data in pairs(claimedParts) do
-            if processed >= 30 then
+            if processed >= 40 then -- Increased processing per frame
                 break
             end
             
             if part and part.Parent then
                 pcall(function()
-                    if part:GetNetworkOwner() ~= player then
-                        part:SetNetworkOwner(player)
+                    -- Enhanced network ownership maintenance
+                    local owner = part:GetNetworkOwner()
+                    if owner ~= player then
+                        local success = pcall(function()
+                            part:SetNetworkOwner(player)
+                        end)
+                        
+                        if not success then
+                            pcall(function()
+                                sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
+                            end)
+                        end
                     end
+                    
+                    -- Maintain part properties
                     part.CanCollide = false
+                    part.Massless = true
+                    part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
+                    
+                    -- Zero out velocities for better control
+                    part.Velocity = Vector3.zero
+                    part.RotVelocity = Vector3.zero
+                    
+                    processed = processed + 1
                 end)
-                processed = processed + 1
             else
                 table.insert(partsToRemove, part)
             end
@@ -292,21 +357,36 @@ function pcz()
     
     connection = Workspace.DescendantAdded:Connect(function(part)
         if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
-            task.delay(0.1, function()
+            task.delay(0.05, function() -- Reduced delay for faster claiming
                 if not claimedParts[part] then
                     claimedParts[part] = {
                         CanCollide = part.CanCollide,
-                        claimed = true
+                        claimed = true,
+                        OriginalMassless = part.Massless
                     }
                     
                     pcall(function()
                         part.CanCollide = false
-                        part.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01)
-                        part:SetNetworkOwner(player)
+                        part.Massless = true
+                        part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
+                        
+                        local success = pcall(function()
+                            part:SetNetworkOwner(player)
+                        end)
+                        
+                        if not success then
+                            pcall(function()
+                                sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
+                            end)
+                        end
                     end)
                 end
             end)
         end
+    end)
+    player.CharacterAdded:Connect(function(character)
+        task.wait(1)
+        pcz()
     end)
 end
 
