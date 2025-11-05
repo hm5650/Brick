@@ -299,7 +299,7 @@ function pcz()
     end
     
     local lastProcessTime = 0
-    local processInterval = 0.5
+    local processInterval = 0.2
     
     heartbeatConnection = RunService.Heartbeat:Connect(function()
         local currentTime = tick()
@@ -318,7 +318,7 @@ function pcz()
         
         local processed = 0
         local partsToRemove = {}
-        local maxProcessPerFrame = 16
+        local maxProcessPerFrame = 19
         
         for part, data in pairs(claimedParts) do
             if processed >= maxProcessPerFrame then
