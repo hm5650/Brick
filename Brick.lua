@@ -4594,7 +4594,7 @@ local Tab = Window:Tab({Title = "credits", Icon = "code"}) do
 end
 
 Window:Notify({
-    Title = "script made by @hmmm5650",
+    Title = "script made by @hmmm5651",
     Desc = "Enter Text... (ಠ⁠ ͜⁠ʖ⁠ ⁠ಠ)",
     Time = 5
 })
