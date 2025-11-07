@@ -41,12 +41,7 @@ local function dropdownsound()
     dropdownSound:Play()
 end
 
-local function togglesound()
-    toggleSound:Play()
-end
-
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/x2zu/OPEN-SOURCE-UI-ROBLOX/refs/heads/main/X2ZU%20UI%20ROBLOX%20OPEN%20SOURCE/DummyUi-leak-by-x2zu/fetching-main/Tools/Framework.luau"))()
--- Create Main Window
 local Window = Library:Window({
     Title = "Brick",
     Desc = "I'm bricking it, I'm bricking it",
@@ -97,7 +92,6 @@ local RANDOM_SEED_SCALE = 7.3
 local GRAVITY_MULTIPLIER = 1.5
 local INITIAL_BOOST = 10
 local MAX_SPEED = 20
-local SIMULATION_RADIUS = 1000
 local ringParts = {}
 local radius = 50
 local speed = 2
@@ -115,7 +109,7 @@ local angle = 1
 local bhradius = 0
 local angleSpeed = 10
 local blackHoleActive = false
-local getpart = 1000
+local getpart = 300
 local networkown = {}
 local cb = nil
 local ts = 10
@@ -136,6 +130,9 @@ local blackHoleSuctionStrength = 100
 local blackHoleRadius = 50
 local blackHoleConnection = nil
 local blackHoleParts = {}
+local windsEnabled = false
+local gravityEnabled = false
+local magnetEnabled = false
 
 local PartAttachTool = {
     Tool = nil,
@@ -230,9 +227,14 @@ function pcz()
         connection = nil
     end
 
-    local targetFPS = 60
-    local frameTime = 1 / targetFPS
+    local MAX_PARTS_PER_FRAME = 10
+    local NETWORK_UPDATE_INTERVAL = 3.0
+    local FRAME_TIME = 1 / 60
     local lastFrameTime = tick()
+    local lastNetworkUpdate = 0
+    local lastCleanupTime = 0
+    local CLEANUP_INTERVAL = 3
+    local processedPartsCount = 0
     
     local function setupRespawnHandler()
         if player.Character then
@@ -245,110 +247,133 @@ function pcz()
     
     setupRespawnHandler()
     
-    local character = player.Character
-    local center = character and character:FindFirstChild("HumanoidRootPart") and character.HumanoidRootPart.Position or Vector3.new(0, 0, 0)
-    
-    local parts = workspace:GetPartBoundsInRadius(center, getpart)
-    local partsProcessed = 0
-    local maxPartsPerFrame = 25
-    
-    for i, part in ipairs(parts) do
-        if partsProcessed >= maxPartsPerFrame then
-            break
-        end
+    local function scanInitialParts()
+        local character = player.Character
+        local center = character and character:FindFirstChild("HumanoidRootPart") and character.HumanoidRootPart.Position or Vector3.new(0, 0, 0)
         
-        if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
-            if not claimedParts[part] then
-                claimedParts[part] = {
-                    CanCollide = part.CanCollide,
-                    claimed = true,
-                    OriginalMassless = part.Massless
-                }
-                
-                pcall(function()
-                    part.CanCollide = false
-                    part.Massless = true
-                    part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
+        local parts = workspace:GetPartBoundsInRadius(center, getpart)
+        local partsProcessed = 0
+        local maxInitialParts = 40
+        
+        for i, part in ipairs(parts) do
+            if partsProcessed >= maxInitialParts then
+                break
+            end
+            
+            if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
+                if not claimedParts[part] then
+                    claimedParts[part] = {
+                        CanCollide = part.CanCollide,
+                        claimed = true,
+                        OriginalMassless = part.Massless,
+                        lastNetworkCheck = 0
+                    }
                     
-                    local success = pcall(function()
-                        part:SetNetworkOwner(player)
+                    pcall(function()
+                        part.CanCollide = false
+                        part.Massless = true
+                        part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
+                        
+                        if (part.Position - center).Magnitude < 100 then
+                            local success = pcall(function()
+                                part:SetNetworkOwner(player)
+                            end)
+                            
+                            if not success then
+                                pcall(function()
+                                    sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
+                                end)
+                            end
+                        end
+                        
+                        for _, child in ipairs(part:GetChildren()) do
+                            if child:IsA("Constraint") or child:IsA("BodyMover") then
+                                child:Destroy()
+                            end
+                        end
                     end)
                     
-                    if not success then
-                        pcall(function()
-                            sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
-                        end)
-                    end
-                    
-                    for _, child in ipairs(part:GetChildren()) do
-                        if child:IsA("Constraint") or child:IsA("BodyMover") then
-                            child:Destroy()
-                        end
-                    end
-                end)
-                
-                partsProcessed = partsProcessed + 1
+                    partsProcessed = partsProcessed + 1
+                end
             end
-        end
-        
-        local currentTime = tick()
-        if currentTime - lastFrameTime >= frameTime then
-            RunService.Heartbeat:Wait()
-            lastFrameTime = tick()
+            
+            if partsProcessed % 15 == 0 then
+                RunService.Heartbeat:Wait()
+            end
         end
     end
     
-    local lastProcessTime = 0
-    local processInterval = 0.67
+    scanInitialParts()
     
     heartbeatConnection = RunService.Heartbeat:Connect(function()
         local currentTime = tick()
-        if currentTime - lastFrameTime < frameTime then
+        
+        if currentTime - lastFrameTime < FRAME_TIME then
             return
         end
         lastFrameTime = currentTime
         
-        if currentTime - lastProcessTime >= processInterval then
+        if currentTime - lastNetworkUpdate >= NETWORK_UPDATE_INTERVAL then
             pcall(function()
                 sethiddenproperty(player, "SimulationRadius", getpart)
                 sethiddenproperty(player, "MaxSimulationRadius", getpart)
             end)
-            lastProcessTime = currentTime
+            lastNetworkUpdate = currentTime
         end
         
+        if currentTime - lastCleanupTime >= CLEANUP_INTERVAL then
+            local partsToRemove = {}
+            for part, data in pairs(claimedParts) do
+                if not part or not part.Parent then
+                    table.insert(partsToRemove, part)
+                end
+            end
+            for _, part in ipairs(partsToRemove) do
+                claimedParts[part] = nil
+            end
+            lastCleanupTime = currentTime
+        end
+        
+        -- Part processing with strict limits
         local processed = 0
         local partsToRemove = {}
-        local maxProcessPerFrame = 30
         
         for part, data in pairs(claimedParts) do
-            if processed >= maxProcessPerFrame then
+            if processed >= MAX_PARTS_PER_FRAME then
                 break
             end
             
             if part and part.Parent then
                 pcall(function()
-                    local owner = part:GetNetworkOwner()
-                    if owner ~= player then
-                        local success = pcall(function()
-                            part:SetNetworkOwner(player)
-                        end)
-                        
-                        if not success then
-                            pcall(function()
-                                sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
+                    local shouldCheckNetwork = (currentTime - data.lastNetworkCheck) > 5
+                    
+                    if shouldCheckNetwork then
+                        local owner = part:GetNetworkOwner()
+                        if owner ~= player then
+                            local success = pcall(function()
+                                part:SetNetworkOwner(player)
                             end)
+                            
+                            if not success then
+                                pcall(function()
+                                    sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
+                                end)
+                            end
                         end
+                        data.lastNetworkCheck = currentTime
                     end
                     
-                    part.CanCollide = false
-                    part.Massless = true
-                    part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
-                    
-                    if part.Velocity.Magnitude > 0.1 then
-                        part.Velocity = Vector3.zero
+                    if part.CanCollide ~= false then
+                        part.CanCollide = false
                     end
-                    if part.RotVelocity.Magnitude > 0.1 then
-                        part.RotVelocity = Vector3.zero
+                    if part.Massless ~= true then
+                        part.Massless = true
+                    end
+                    if part.Velocity.Magnitude > 5 then
+                        part.Velocity = part.Velocity * 0.9
+                    end
+                    if part.RotVelocity.Magnitude > 5 then
+                        part.RotVelocity = part.RotVelocity * 0.9
                     end
                     
                     processed = processed + 1
@@ -357,44 +382,66 @@ function pcz()
                 table.insert(partsToRemove, part)
             end
         end
-        
         for _, part in ipairs(partsToRemove) do
             claimedParts[part] = nil
         end
+        
+        processedPartsCount = processed
     end)
-    
     connection = Workspace.DescendantAdded:Connect(function(part)
         if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
-            task.delay(0.1, function()
-                if not claimedParts[part] then
-                    claimedParts[part] = {
-                        CanCollide = part.CanCollide,
-                        claimed = true,
-                        OriginalMassless = part.Massless
-                    }
-                    
-                    pcall(function()
-                        part.CanCollide = false
-                        part.Massless = true
-                        part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
-                        
-                        local success = pcall(function()
-                            part:SetNetworkOwner(player)
-                        end)
-                        
-                        if not success then
-                            pcall(function()
-                                sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
+            -- Only claim parts that are relatively close to player
+            local character = player.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local distance = (part.Position - character.HumanoidRootPart.Position).Magnitude
+                if distance > 200 then  -- Only claim parts within 200 studs
+                    return
+                end
+            end
+            task.wait(0.2)
+            if not claimedParts[part] then
+                claimedParts[part] = {
+                    CanCollide = part.CanCollide,
+                    claimed = true,
+                    OriginalMassless = part.Massless,
+                    lastNetworkCheck = 0
+                }
+                
+                pcall(function()
+                    part.CanCollide = false
+                    part.Massless = true
+                    part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
+                    task.spawn(function()
+                        task.wait(0.5)
+                        if part and part.Parent and claimedParts[part] then
+                            local success = pcall(function()
+                                part:SetNetworkOwner(player)
                             end)
+                            
+                            if not success then
+                                pcall(function()
+                                    sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
+                                end)
+                            end
                         end
                     end)
-                end
-            end)
+                end)
+            end
         end
     end)
     
     player.CharacterAdded:Connect(function(character)
-        task.wait(1.5)
+        task.wait(3)
+        for part, data in pairs(claimedParts) do
+            if part and part.Parent then
+                pcall(function()
+                    part.CanCollide = data.CanCollide
+                    part.Massless = data.OriginalMassless
+                    part.CustomPhysicalProperties = nil
+                end)
+            end
+        end
+        claimedParts = {}
         pcz()
     end)
 end
@@ -404,6 +451,7 @@ Window:Notify({
     Desc = "PartClaim Enabled",
     Time = 5
 })
+
 local function fly()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/OBFhm5650lol/F/refs/heads/main/F", true))()
 end
@@ -514,8 +562,8 @@ local Tab = Window:Tab({Title = "partclaim", Icon = "folder"}) do
         Title = "Partclaim",
         Desc = nil,
         Callback = function()
-            btnclick()
             pcz()
+            btnclick()
         end
     })
 
@@ -525,15 +573,14 @@ local Tab = Window:Tab({Title = "partclaim", Icon = "folder"}) do
         Min = 100,
         Max = 10000,
         Rounding = 0,
-        Value = 1000,
+        Value = 100,
         Callback = function(val)
-            slidersound()
-            SIMULATION_RADIUS = val
             getpart = val
             pcall(function()
                 sethiddenproperty(player, "SimulationRadius", getpart)
                 sethiddenproperty(player, "MaxSimulationRadius", getpart)
             end)
+            slidersound()
         end
     })
 end
@@ -550,11 +597,11 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Rounding = 0,
         Value = 16,
         Callback = function(val)
-            slidersound()
             local character = LocalPlayer.Character
             if character and character:FindFirstChildOfClass("Humanoid") then
                 character:FindFirstChildOfClass("Humanoid").WalkSpeed = val
             end
+            slidersound()
         end
     })
     
@@ -567,11 +614,11 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
-            slidersound()
             local character = LocalPlayer.Character
             if character and character:FindFirstChildOfClass("Humanoid") then
                 character:FindFirstChildOfClass("Humanoid").JumpPower = val
             end
+            slidersound()
         end
     })
     
@@ -704,8 +751,8 @@ end
 
 local function applyWindForce()
     pcall(function()
-        sethiddenproperty(player, "SimulationRadius", SIMULATION_RADIUS)
-        sethiddenproperty(player, "MaxSimulationRadius", SIMULATION_RADIUS)
+        sethiddenproperty(player, "SimulationRadius", getpart)
+        sethiddenproperty(player, "MaxSimulationRadius", getpart)
     end)
     
     local t = tick()
@@ -1147,7 +1194,7 @@ local LocalPlayer = Players.LocalPlayer
 if not getgenv().Network then
     getgenv().Network = {
         BaseParts = {},
-        FPS = 30,
+        FPS = 20,
         Velocity = Vector3.new(25.1, 0, 0)
     }
     
@@ -1156,8 +1203,8 @@ if not getgenv().Network then
             if not isActive then return end
             
             pcall(function()
-                sethiddenproperty(LocalPlayer, "MaxSimulationRadius", math.huge)
-                sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+                sethiddenproperty(LocalPlayer, "MaxSimulationRadius", getpart)
+                sethiddenproperty(LocalPlayer, "SimulationRadius", getpart)
             end)
             
             local partsToProcess = {}
@@ -1550,7 +1597,7 @@ if not getgenv().Network then
     local function EnablePartControl()
         LocalPlayer.ReplicationFocus = workspace
         RunService.Heartbeat:Connect(function()
-            sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+            sethiddenproperty(LocalPlayer, "SimulationRadius", getpart)
             for _, Part in pairs(Network.BaseParts) do
                 if Part:IsDescendantOf(workspace) then
                     Part.Velocity = Network.Velocity
@@ -1779,7 +1826,7 @@ if not getgenv().Network then
     local function EnablePartControl()
         LocalPlayer.ReplicationFocus = Workspace
         RunService.Heartbeat:Connect(function()
-            sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+            sethiddenproperty(LocalPlayer, "SimulationRadius", getpart)
             for _, Part in pairs(Network.BaseParts) do
                 if Part:IsDescendantOf(Workspace) then
                     Part.Velocity = Network.Velocity
@@ -1999,7 +2046,7 @@ if not getgenv().Network then
     local function EnablePartControl()
         LocalPlayer.ReplicationFocus = Workspace
         RunService.Heartbeat:Connect(function()
-            sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+            sethiddenproperty(LocalPlayer, "SimulationRadius", getpart)
             for _, Part in pairs(Network.BaseParts) do
                 if Part:IsDescendantOf(Workspace) then
                     Part.Velocity = Network.Velocity
@@ -2133,8 +2180,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         List = modes,
         Value = "Horizontal Ring",
         Callback = function(mode)
-            dropdownsound()
             currentMode = table.find(modes, mode)
+            dropdownsound()
         end
     })
 
@@ -2146,8 +2193,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
-            slidersound()
             radius = val
+            slidersound()
         end
     })
 
@@ -2159,8 +2206,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Rounding = 0,
         Value = 2,
         Callback = function(val)
-            slidersound()
             speed = val
+            slidersound()
         end
     })
     Tab:Section({Title = "lesser lag"})
@@ -2168,9 +2215,9 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Title = "Toggle PartOrbit",
         Desc = "lesser calculation = lesser lag",
         Callback = function()
-            btnclick()
             pcz()
             meme()
+            btnclick()
         end
     })
     Tab:Slider({
@@ -2180,8 +2227,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
-            slidersound()
             fradius = val
+            slidersound()
         end
     })
 
@@ -2192,8 +2239,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Rounding = 0,
         Value = 555,
         Callback = function(val)
-            slidersound()
             fattractionStrength = val
+            slidersound()
         end
     })
 
@@ -2202,9 +2249,9 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Title = "Toggle PartOrbit",
         Desc = "lesser lesser calculation = lesser lesser lag",
         Callback = function()
-            btnclick()
             pcz()
             toggleorbit()
+            btnclick()
         end
     })
 
@@ -2213,8 +2260,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         List = GetPlayerList(),
         Value = "me",
         Callback = function(selectedPlayer)
-            slidersound()
             UpdateTargetPlayer(selectedPlayer)
+            dropdownsound()
         end
     })
 
@@ -2225,8 +2272,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
-            slidersound()
             farness = val
+            slidersound()
         end
     })
 
@@ -2238,8 +2285,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Rounding = 0,
         Value = 555,
         Callback = function(val)
-            slidersound()
             fast = val
+            slidersound()
         end
     })
 
@@ -2250,8 +2297,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Rounding = 0,
         Value = 1,
         Callback = function(val)
-            slidersound()
             height = val
+            slidersound()
         end
     })
     Tab:Section({Title = ""})
@@ -2259,8 +2306,8 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Title = "Toggle Tornado",
         Desc = "tornado? :0",
         Callback = function()
-            btnclick()
             tt()
+            btnclick()
         end
     })
 
@@ -2268,13 +2315,14 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         Title = "PartOrbit gui",
         Desc = "woah :o",
         Callback = function()
-            btnclick()
+
             rpp()
             Window:Notify({
                 Title = "Brick",
                 Desc = "Why do u need a gui",
                 Time = 5
             })
+            btnclick()
         end
     })
 end
@@ -2432,7 +2480,7 @@ if not getgenv().Network then
     local function EnablePartControl()
         LocalPlayer.ReplicationFocus = Workspace
         RunService.Heartbeat:Connect(function()
-            sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+            sethiddenproperty(LocalPlayer, "SimulationRadius", getpart)
             for _, part in pairs(Network.BaseParts) do
                 if part:IsDescendantOf(Workspace) then
                     part.Velocity = Network.Velocity
@@ -2586,8 +2634,8 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
         List = GetPlayerList(),
         Value = "me",
         Callback = function(selectedPlayer)
-            dropdownsound()
             updateTargetPlayer(selectedPlayer)
+            dropdownsound()
         end
     })
 
@@ -2595,9 +2643,9 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
         Title = "Toggle BlackHole",
         Desc = "",
         Callback = function()
-            btnclick()
             pcz()
             togglebh()
+            btnclick()
         end
     })
 
@@ -2608,8 +2656,8 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
         Rounding = 0,
         Value = 0,
         Callback = function(val)
-            slidersound()
             bhradius = val
+            slidersound()
         end
     })
 
@@ -2620,8 +2668,8 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
-            slidersound()
             angleSpeed = val
+            slidersound()
         end
     })
     Tab:Section({Title = ""})
@@ -2629,9 +2677,9 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
         Title = "Summon Black Hole",
         Desc = "Create a blackhole in the sky that sucks up unanchored parts",
         Callback = function()
-            btnclick()
             pcz()
             toggleBlackHole()
+            btnclick()
         end
     })
     
@@ -2643,8 +2691,8 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
         Rounding = 0,
         Value = 100,
         Callback = function(val)
-            slidersound()
             blackHoleSuctionStrength = val
+            slidersound()
         end
     })
     
@@ -2656,11 +2704,11 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
-            slidersound()
             blackHoleRadius = val
             if blackHoleSphere then
                 blackHoleSphere.Size = Vector3.new(val / 2.5, val / 2.5, val / 2.5)
             end
+            slidersound()
         end
     })
 
@@ -3142,8 +3190,8 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Title = "Telekinesis Tool",
         Desc = "tlelele",
         Callback = function()
-            btnclick()
             pmg()
+            btnclick()
         end
     })
 
@@ -3151,41 +3199,44 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Title = "Part Attach Tool",
         Desc = "wled",
         Callback = function()
-            btnclick()
             pmg3()
             pcz()
+            btnclick()
         end
     })
 
-    Tab:Toggle({  
-        Title = "Invert Parts Gravity",  
-        Desc = "omg floating parts",  
-        Value = false,  
-        Callback = function(v)  
-            if v then
-                GravOn()
-                pcz()
-            else
-                GravOff()
-            end
-            togglesound()
-        end  
-    })
-    Tab:Section({Title = ""})
-    Tab:Toggle({  
-        Title = "Heavy Winds",  
-        Desc = "my wig D:",  
-        Value = false,  
-        Callback = function(v)  
-            if v then
-                WindOn()
-                pcz()
-            else
-                WindOff()
-            end
-            togglesound()
-        end  
-    })
+Tab:Button({  
+    Title = "Invert Parts Gravity",  
+    Desc = "omg floating parts",  
+    Callback = function()
+        gravityEnabled = not gravityEnabled
+        
+        if gravityEnabled then
+            GravOn()
+            pcz()
+        else
+            GravOff()
+        end
+        btnclick()
+    end  
+})
+
+Tab:Section({Title = ""})
+Tab:Button({  
+    Title = "Heavy Winds",  
+    Desc = "my wig D:",  
+    Callback = function()  
+        windsEnabled = not windsEnabled
+        
+        if windsEnabled then
+            WindOn()
+            pcz()
+        else
+            WindOff()
+        end
+        btnclick()
+    end  
+})
 
     local function retain(part)
         if part and part:IsA("BasePart") and not part.Anchored then
@@ -3272,22 +3323,23 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         networkown = {}
     end
 
-    Tab:Toggle({
-        Title = "Heavy Winds 2",
-        Desc = "woah",
-        Value = false,
-        Callback = function(v)
-            if v then
-                cb = "tornado"
-                scanParts()
-                startPartControl()
-            else
-                cb = nil
-                stopPartControl()
-            end
-            togglesound()
+local heavyWinds2Button = Tab:Button({
+    Title = "Heavy Winds 2",
+    Desc = "woah",
+    Callback = function()
+        heavyWinds2Enabled = not heavyWinds2Enabled
+        
+        if heavyWinds2Enabled then
+            cb = "tornado"
+            scanParts()
+            startPartControl()
+        else
+            cb = nil
+            stopPartControl()
         end
-    })
+        btnclick()
+    end
+})
 
     Tab:Slider({
         Title = "Wind Size",
@@ -3296,8 +3348,8 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Rounding = 0,
         Value = 100,
         Callback = function(val)
-            slidersound()
             ts = val
+            slidersound()
         end
     })
 
@@ -3308,8 +3360,8 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Rounding = 0,
         Value = 10,
         Callback = function(val)
-            slidersound()
             ss = val
+            slidersound()
         end
     })
     Tab:Section({Title = ""})
@@ -3335,72 +3387,83 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         end
     end
 
-    Tab:Toggle({
-        Title = "Part Magnet",
-        Desc = "Attract or repel parts or smth",
-        Value = false,
-        Callback = function(v)
-            startt = v
-            if v then
-                magnetConnection = RunService.Heartbeat:Connect(function()
-                    local character = LocalPlayer.Character
-                    if character and character:FindFirstChild("HumanoidRootPart") then
-                        local magnetPosition = character.HumanoidRootPart.Position
+Tab:Button({
+    Title = "Part Magnet",
+    Desc = "Attract or repel parts or smth",
+    Callback = function()
+        magnetEnabled = not magnetEnabled
+        startt = magnetEnabled
+        
+        if magnetEnabled then
+            magnetConnection = RunService.Heartbeat:Connect(function()
+                local character = LocalPlayer.Character
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    local magnetPosition = character.HumanoidRootPart.Position
 
-                        for part in pairs(mag) do
-                            if not part or not part.Parent then
-                                mag[part] = nil
-                            end
+                    for part in pairs(mag) do
+                        if not part or not part.Parent then
+                            mag[part] = nil
                         end
-                        
-                        for _, part in ipairs(Workspace:GetDescendants()) do
-                            if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(character) then
-                                local distance = (part.Position - magnetPosition).Magnitude
-                                if distance < magnetRadius then
-                                    erxa(part)
-                                    
-                                    local direction
-                                    if magnetMode == "Pull" then
-                                        direction = (magnetPosition - part.Position).Unit
-                                    else
-                                        direction = (part.Position - magnetPosition).Unit
-                                    end
-                                    
-                                    local force = magnetStrength * (1 - (distance / magnetRadius))
-                                    part.Velocity = direction * force
-                                    part.RotVelocity = Vector3.zero
+                    end
+                    
+                    for _, part in ipairs(Workspace:GetDescendants()) do
+                        if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(character) then
+                            local distance = (part.Position - magnetPosition).Magnitude
+                            if distance < magnetRadius then
+                                erxa(part)
+                                
+                                local direction
+                                if magnetMode == "Pull" then
+                                    direction = (magnetPosition - part.Position).Unit
                                 else
-                                    byeee(part)
+                                    direction = (part.Position - magnetPosition).Unit
                                 end
+                                
+                                local force = magnetStrength * (1 - (distance / magnetRadius))
+                                part.Velocity = direction * force
+                                part.RotVelocity = Vector3.zero
+                            else
+                                byeee(part)
                             end
                         end
                     end
-                end)
-            else
-                if magnetConnection then
-                    magnetConnection:Disconnect()
-                    magnetConnection = nil
                 end
-
-                for part in pairs(mag) do
-                    if part and part.Parent then
-                        byeee(part)
-                    end
-                end
-                mag = {}
+            end)
+            Window:Notify({
+                Title = "Part Magnet",
+                Desc = "Part Magnet Activated - " .. magnetMode,
+                Time = 3
+            })
+        else
+            if magnetConnection then
+                magnetConnection:Disconnect()
+                magnetConnection = nil
             end
-            pcz()
-            togglesound()
+
+            for part in pairs(mag) do
+                if part and part.Parent then
+                    byeee(part)
+                end
+            end
+            mag = {}
+            Window:Notify({
+                Title = "Part Magnet",
+                Desc = "Part Magnet Disabled",
+                Time = 3
+            })
         end
-    })
+        pcz()
+        btnclick()
+    end
+})
 
     Tab:Dropdown({
         Title = "Magnet Mode",
         List = {"Pull", "Push"},
         Value = "Pull",
         Callback = function(mode)
-            dropdownsound()
             magnetMode = mode
+            dropdownsound()
         end
     })
 
@@ -3412,8 +3475,8 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Rounding = 0,
         Value = 100,
         Callback = function(val)
-            slidersound()
             magnetStrength = val
+            slidersound()
         end
     })
 
@@ -3425,8 +3488,8 @@ local Tab = Window:Tab({Title = "Part Mod", Icon = "settings"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
-            slidersound()
             magnetRadius = val
+            slidersound()
         end
     })
 end
@@ -3496,8 +3559,8 @@ function TpuaPartHandler:Start()
     end))
 
     table.insert(self.Connections, RunService.Heartbeat:Connect(function()
-        sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
-        sethiddenproperty(LocalPlayer, "MaxSimulationRadius", math.huge)
+        sethiddenproperty(LocalPlayer, "SimulationRadius", getpart)
+        sethiddenproperty(LocalPlayer, "MaxSimulationRadius", getpart)
         
         for _, targetData in ipairs(self.TargetParts) do
             pcall(function()
@@ -3653,6 +3716,7 @@ local Tab = Window:Tab({Title = "Tpua", Icon = "wind"}) do
                     ToggleTpua()
                 end
             end
+            btnclick()
         end
     })
     
@@ -3667,6 +3731,7 @@ local Tab = Window:Tab({Title = "Tpua", Icon = "wind"}) do
                 task.wait(0.1)
                 StartTpua()
             end
+            dropdownsound()
         end
     })
 end
@@ -4414,15 +4479,15 @@ local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
             local alignPos = Instance.new("AlignPosition")
             alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
             alignPos.Attachment0 = attachment
-            alignPos.MaxForce = 1e6
-            alignPos.MaxVelocity = 1e6
+            alignPos.MaxForce = 1e5
+            alignPos.MaxVelocity = 1e5
             alignPos.Responsiveness = 200
             alignPos.Parent = part
             
             local alignOri = Instance.new("AlignOrientation")
             alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
             alignOri.Attachment0 = attachment
-            alignOri.MaxTorque = 1e6
+            alignOri.MaxTorque = 1e5
             alignOri.Responsiveness = 200
             alignOri.Parent = part
             
@@ -4462,22 +4527,22 @@ local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
         end
     end
 
-    local PartControlToggle = Tab:Toggle({
-        Title = "Enable Part Control",
-        Desc = "Toggle part control system",
-        Value = false,
-        Callback = function(v)
-            AttachmentSystem.Enabled = v
-            if v then
-                for _, part in ipairs(workspace:GetDescendants()) do
-                    AttachmentSystem:ProcessPart(part)
-                end
-            else
-                AttachmentSystem:ReleaseAllParts()
+local PartControlButton = Tab:Button({
+    Title = "Enable Part Control",
+    Desc = "Toggle part control system on/off",
+    Callback = function()
+        AttachmentSystem.Enabled = not AttachmentSystem.Enabled
+        
+        if AttachmentSystem.Enabled then
+            for _, part in ipairs(workspace:GetDescendants()) do
+                AttachmentSystem:ProcessPart(part)
             end
-            togglesound()
+        else
+            AttachmentSystem:ReleaseAllParts()
         end
-    })
+        btnclick()
+    end
+})
 
     local RadiusSlider = Tab:Slider({
         Title = "Size",
@@ -4487,8 +4552,8 @@ local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
         Rounding = 0,
         Value = 50,
         Callback = function(val)
-            slidersound()
             AttachmentSystem.ScaleFactor = val / 50
+            slidersound()
         end
     })
 
@@ -4505,8 +4570,8 @@ local Tab = Window:Tab({Title = "Part Controller", Icon = "settings"}) do
         },
         Value = "Angel_Wings",
         Callback = function(mode)
-            dropdownsound()
             AttachmentSystem.CurrentMode = mode
+            dropdownsound()
         end
     })
 
