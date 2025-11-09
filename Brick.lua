@@ -334,7 +334,6 @@ function pcz()
             lastCleanupTime = currentTime
         end
         
-        -- Part processing with strict limits
         local processed = 0
         local partsToRemove = {}
         
@@ -390,11 +389,10 @@ function pcz()
     end)
     connection = Workspace.DescendantAdded:Connect(function(part)
         if part and part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
-            -- Only claim parts that are relatively close to player
             local character = player.Character
             if character and character:FindFirstChild("HumanoidRootPart") then
                 local distance = (part.Position - character.HumanoidRootPart.Position).Magnitude
-                if distance > 200 then  -- Only claim parts within 200 studs
+                if distance > 200 then
                     return
                 end
             end
@@ -604,7 +602,6 @@ local Tab = Window:Tab({Title = "Client", Icon = "user"}) do
         end
     })
     
-    -- Slider
     Tab:Slider({
         Title = "JumpPower",
         Desc = "Adjust your character's jump height",
@@ -3541,170 +3538,6 @@ Tab:Toggle({
         togglesound()
     end
 })
-
-local platformEnabled = false
-local platformConnection = nil
-local platformParts = {}
-local platformSize = 10
-local platformThickness = 2
-
-local function createPlatform()
-    platformEnabled = not platformEnabled
-    
-    if platformEnabled then
-        Window:Notify({
-            Title = "Platform Creator",
-            Desc = "Platform mode enabled - Parts will form under you",
-            Time = 3
-        })
-        
-        -- Start platform creation
-        platformConnection = RunService.Heartbeat:Connect(function()
-            local character = LocalPlayer.Character
-            if not character then return end
-            
-            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-            if not humanoidRootPart then return end
-            
-            local playerPosition = humanoidRootPart.Position
-            local platformCenter = Vector3.new(playerPosition.X, playerPosition.Y - 5, playerPosition.Z)
-            
-            -- Clear old platform parts that are too far
-            for part, _ in pairs(platformParts) do
-                if part and part.Parent then
-                    local distance = (part.Position - platformCenter).Magnitude
-                    if distance > platformSize * 3 then
-                        platformParts[part] = nil
-                    end
-                else
-                    platformParts[part] = nil
-                end
-            end
-            
-            -- Find and attract parts to form platform
-            local nearbyParts = workspace:GetPartBoundsInRadius(platformCenter, platformSize * 2)
-            
-            for _, part in ipairs(nearbyParts) do
-                if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(character) then
-                    if not claimedParts[part] then
-                        -- Claim the part first
-                        claimedParts[part] = {
-                            CanCollide = part.CanCollide,
-                            claimed = true,
-                            OriginalMassless = part.Massless,
-                            lastNetworkCheck = 0
-                        }
-                        
-                        pcall(function()
-                            part.CanCollide = false
-                            part.Massless = true
-                            part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
-                            
-                            local success = pcall(function()
-                                part:SetNetworkOwner(LocalPlayer)
-                            end)
-                            
-                            if not success then
-                                pcall(function()
-                                    sethiddenproperty(part, "NetworkOwnership", Enum.NetworkOwnership.Manual)
-                                end)
-                            end
-                        end)
-                    end
-                    
-                    -- Calculate target position on platform grid
-                    local partPos = part.Position
-                    local targetX = math.floor((partPos.X - platformCenter.X) / 2) * 2 + platformCenter.X
-                    local targetZ = math.floor((partPos.Z - platformCenter.Z) / 2) * 2 + platformCenter.Z
-                    local targetY = platformCenter.Y
-                    
-                    local targetPosition = Vector3.new(targetX, targetY, targetZ)
-                    
-                    -- Move part towards platform position
-                    local direction = (targetPosition - partPos).Unit
-                    local distance = (targetPosition - partPos).Magnitude
-                    
-                    if distance > 1 then
-                        part.Velocity = direction * math.min(distance * 10, 50)
-                    else
-                        part.Velocity = Vector3.zero
-                        part.Position = targetPosition
-                        part.Anchored = true -- Anchor when in position
-                        part.CanCollide = true -- Enable collision for platform
-                        part.Transparency = 0.3 -- Make slightly transparent
-                        part.Color = Color3.fromRGB(100, 100, 255) -- Blue tint for platform parts
-                        
-                        platformParts[part] = true
-                    end
-                end
-            end
-        end)
-        
-    else
-        -- Disable platform mode
-        if platformConnection then
-            platformConnection:Disconnect()
-            platformConnection = nil
-        end
-        
-        -- Release platform parts back to normal
-        for part, _ in pairs(platformParts) do
-            if part and part.Parent then
-                part.Anchored = false
-                part.Transparency = 0
-                part.Color = Color3.fromRGB(255, 255, 255) -- Reset color
-                
-                if claimedParts[part] then
-                    part.CanCollide = claimedParts[part].CanCollide
-                else
-                    part.CanCollide = true
-                end
-            end
-        end
-        
-        platformParts = {}
-        
-        Window:Notify({
-            Title = "Platform Creator",
-            Desc = "Platform mode disabled",
-            Time = 3
-        })
-    end
-    
-    btnclick()
-end
-
--- Add to your Part Mod tab:
-Tab:Section({Title = "Platform Tools"})
-
-Tab:Toggle({
-    Title = "Auto Platform",
-    Desc = "Parts automatically form a platform under you",
-    Value = false,
-    Callback = function(v)
-        if v then
-            createPlatform()
-        else
-            if platformEnabled then
-                createPlatform() -- This will disable it
-            end
-        end
-    end
-})
-
-Tab:Slider({
-    Title = "Platform Size",
-    Desc = "Size of the platform area",
-    Min = 5,
-    Max = 30,
-    Rounding = 1,
-    Value = 10,
-    Callback = function(val)
-        platformSize = val
-        slidersound()
-    end
-})
-
 end
 
 local function GetTpuaPlayerList()
