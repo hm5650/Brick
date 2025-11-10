@@ -78,6 +78,17 @@ local cleanupInterval = 5
 local maxParts = math.huge
 local partCheckCooldown = {}
 local startt = false
+local magnetEnabled = false
+local magnetParts = {}
+local magnetClaimedParts = {}
+local magnetLastUpdate = 0
+local magnetConnection = nil
+local magnetEffectModel = Instance.new("Model")
+local vortexEnabled = false
+local vortexRadius = 90
+local vortexStrength = 3
+local vortexDirection = 1
+local vortexParts = {}
 local magnetConnection
 local magnetMode = "Pull"
 local magnetStrength = 100
@@ -194,6 +205,20 @@ local modes = {
     "Rose Curve",
     "Lissajous",
     "Polygonal Orbit"
+}
+
+
+local magnetConfig = {
+    BaseRadius = 10,
+    MaxRadius = 50,
+    Strength = 100,
+    UpdateRate = 0.05,
+    SimulationRadius = 2000,
+    MaxParts = math.huge,
+    MaxMass = math.huge,
+    ClaimDuration = 30,
+    VisualEffects = false,
+    Direction = "Pull"
 }
 
 function pcz()
@@ -3488,6 +3513,363 @@ Tab:Button({
             slidersound()
         end
     })
+
+magnetEffectModel.Name = "MagnetEffects"
+magnetEffectModel.Parent = workspace
+local function setMagnetSimulationRadius()
+    pcall(function()
+        sethiddenproperty(LocalPlayer, "SimulationRadius", magnetConfig.SimulationRadius)
+        sethiddenproperty(LocalPlayer, "MaxSimulationRadius", magnetConfig.SimulationRadius)
+    end)
+end
+
+local function canManipulatePart(part)
+    if not part:IsA("BasePart") then return false end
+    if part.Anchored then return false end
+    if part:GetMass() > magnetConfig.MaxMass then return false end
+    if part:IsDescendantOf(LocalPlayer.Character) then return false end
+    if part.Locked then return false end
+    return true
+end
+
+local function claimMagnetPart(part)
+    if not magnetClaimedParts[part] then
+        magnetClaimedParts[part] = {
+            Owner = LocalPlayer,
+            ClaimTime = tick()
+        }
+        
+        if magnetConfig.VisualEffects then
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "MagnetClaimHighlight"
+            highlight.FillColor = Color3.fromRGB(0, 170, 255)
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            highlight.FillTransparency = 0.7
+            highlight.Parent = part
+        end
+        
+        delay(magnetConfig.ClaimDuration, function()
+            if magnetClaimedParts[part] and magnetClaimedParts[part].Owner == LocalPlayer then
+                magnetClaimedParts[part] = nil
+                if part.Parent and part:FindFirstChild("MagnetClaimHighlight") then
+                    part.MagnetClaimHighlight:Destroy()
+                end
+            end
+        end)
+    end
+end
+
+local function releaseMagnetPart(part)
+    if magnetClaimedParts[part] and magnetClaimedParts[part].Owner == LocalPlayer then
+        magnetClaimedParts[part] = nil
+        if part.Parent and part:FindFirstChild("MagnetClaimHighlight") then
+            part.MagnetClaimHighlight:Destroy()
+        end
+    end
+end
+
+local function calculateMagnetForce(part, rootPosition, direction)
+    local distance = (part.Position - rootPosition).Magnitude
+    local distanceRatio = math.clamp(1 - (distance/magnetConfig.MaxRadius), 0, 1)
+    local forceFactor = distanceRatio^2 * magnetConfig.Strength * 100
+    local forceDirection = direction.Unit + Vector3.new(0, 0.2, 0)
+    return forceDirection.Unit * forceFactor * part:GetMass()
+end
+
+local function updateMagnet()
+    local currentTime = tick()
+    if currentTime - magnetLastUpdate < magnetConfig.UpdateRate then return end
+    magnetLastUpdate = currentTime
+    
+    setMagnetSimulationRadius()
+    local character = LocalPlayer.Character
+    if not character then return end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    local rootPosition = rootPart.Position
+    local direction
+    local parts = workspace:FindPartsInRegion3(
+        Region3.new(
+            rootPosition - Vector3.new(magnetConfig.MaxRadius, magnetConfig.MaxRadius, magnetConfig.MaxRadius),
+            rootPosition + Vector3.new(magnetConfig.MaxRadius, magnetConfig.MaxRadius, magnetConfig.MaxRadius)
+        ),
+        nil,
+        magnetConfig.MaxParts
+    )
+    
+    for _, part in ipairs(parts) do
+        direction = (magnetConfig.Direction == "Pull") and (rootPosition - part.Position) or (part.Position - rootPosition)
+        
+        if canManipulatePart(part) then
+            claimMagnetPart(part)
+            
+            local force = calculateMagnetForce(part, rootPosition, direction)
+            part:ApplyImpulse(force * 0.03)
+            if not magnetParts[part] then
+                magnetParts[part] = true
+                part.AncestryChanged:Connect(function()
+                    magnetParts[part] = nil
+                    releaseMagnetPart(part)
+                end)
+            end
+        elseif magnetParts[part] then
+            magnetParts[part] = nil
+            releaseMagnetPart(part)
+        end
+    end
+end
+
+local function cleanupMagnet()
+    for part, _ in pairs(magnetParts) do
+        if part and part.Parent then
+            releaseMagnetPart(part)
+        end
+    end
+    magnetParts = {}
+    
+    if magnetConnection then
+        magnetConnection:Disconnect()
+        magnetConnection = nil
+    end
+    
+    magnetEffectModel:ClearAllChildren()
+end
+
+local function updateVortex()
+    if not vortexEnabled then return end
+    
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    
+    local rootPos = rootPart.Position
+    
+    for _, part in ipairs(workspace:GetDescendants()) do
+        if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(character) then
+            local distance = (part.Position - rootPos).Magnitude
+            if distance <= vortexRadius then
+                if not vortexParts[part] then
+                    vortexParts[part] = {
+                        Velocity = Instance.new("BodyVelocity"),
+                        OriginalProps = {
+                            CanCollide = part.CanCollide,
+                            CustomPhysicalProperties = part.CustomPhysicalProperties
+                        }
+                    }
+                    vortexParts[part].Velocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    vortexParts[part].Velocity.Parent = part
+                    
+                    part.CanCollide = false
+                    part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+                end
+                
+                local toPart = part.Position - rootPos
+                local tangent = Vector3.new(-toPart.Z, 0, toPart.X) * vortexDirection
+                tangent = tangent.Unit
+                local inward = -toPart.Unit * 0.3
+                local force = (1 - (distance/vortexRadius)) * vortexStrength * 100
+                
+                vortexParts[part].Velocity.Velocity = (tangent + inward) * force
+            elseif vortexParts[part] then
+                part.CanCollide = vortexParts[part].OriginalProps.CanCollide
+                part.CustomPhysicalProperties = vortexParts[part].OriginalProps.CustomPhysicalProperties
+                if vortexParts[part].Velocity then
+                    vortexParts[part].Velocity:Destroy()
+                end
+                vortexParts[part] = nil
+            end
+        end
+    end
+end
+
+local function cleanupVortex()
+    for part, data in pairs(vortexParts) do
+        if part and part.Parent then
+            part.CanCollide = data.OriginalProps.CanCollide
+            part.CustomPhysicalProperties = data.OriginalProps.CustomPhysicalProperties
+            if data.Velocity then
+                data.Velocity:Destroy()
+            end
+        end
+    end
+    vortexParts = {}
+end
+
+local function launchNearbyParts()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    
+    local rootPosition = rootPart.Position
+    local partsLaunched = 0
+    local launchStrength = 200
+    local launchHeight = 50
+    
+    local parts = workspace:FindPartsInRegion3(
+        Region3.new(
+            rootPosition - Vector3.new(magnetConfig.MaxRadius, 5, magnetConfig.MaxRadius),
+            rootPosition + Vector3.new(magnetConfig.MaxRadius, magnetConfig.MaxRadius, magnetConfig.MaxRadius)
+        ),
+        nil,
+        magnetConfig.MaxParts
+    )
+    
+    for _, part in ipairs(parts) do
+        if canManipulatePart(part) then
+            claimMagnetPart(part)
+            
+            local direction = (part.Position - rootPosition).Unit
+            direction = Vector3.new(
+                direction.X * 0.8, 
+                math.clamp(launchHeight/50, 0.3, 1.5),
+                direction.Z * 0.8
+            ).Unit
+            
+            local distanceFactor = 1 - math.clamp((part.Position - rootPosition).Magnitude/magnetConfig.MaxRadius, 0, 1)
+            local force = direction * launchStrength * part:GetMass() * (0.5 + distanceFactor * 1.5)
+            
+            part:ApplyImpulse(force)
+            partsLaunched = partsLaunched + 1
+        end
+    end
+    
+    Window:Notify({
+        Title = "Part Launcher",
+        Desc = ("Launched %d parts!"):format(partsLaunched),
+        Time = 3
+    })
+end
+
+
+Tab:Toggle({
+    Title = "Part Magnet2",
+    Desc = "wow new cooler version :0",
+    Value = false,
+    Callback = function(v)
+        magnetEnabled = v
+        if v then
+            local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+            magnetConnection = RunService.Heartbeat:Connect(updateMagnet)
+        else
+            cleanupMagnet()
+        end
+        togglesound()
+    end
+})
+
+Tab:Slider({
+    Title = "Magnet2 Radius",
+    Desc = "Area of effect for magnet",
+    Min = 10,
+    Max = 200,
+    Rounding = 0,
+    Value = 50,
+    Callback = function(val)
+        magnetConfig.MaxRadius = val
+        slidersound()
+    end
+})
+
+Tab:Slider({
+    Title = "Magnet2 Strength",
+    Desc = "Force of attraction/repulsion",
+    Min = 10,
+    Max = 1000,
+    Rounding = 0,
+    Value = 100,
+    Callback = function(val)
+        magnetConfig.Strength = val
+        slidersound()
+    end
+})
+
+Tab:Dropdown({
+    Title = "Magnet2 Direction",
+    List = {"Pull", "Push"},
+    Value = "Pull",
+    Callback = function(mode)
+        magnetConfig.Direction = mode
+        dropdownsound()
+    end
+})
+
+Tab:Section({Title = ""})
+
+Tab:Button({
+    Title = "Launch Parts",
+    Desc = "Launch nearby parts into the air",
+    Callback = function()
+        launchNearbyParts()
+        btnclick()
+    end
+})
+
+Tab:Section({Title = ""})
+
+Tab:Toggle({
+    Title = "Part Vortex",
+    Desc = "Create swirling vortex of parts around you",
+    Value = false,
+    Callback = function(v)
+        vortexEnabled = v
+        if v then
+            RunService.Heartbeat:Connect(updateVortex)
+            Window:Notify({
+                Title = "Part Vortex",
+                Desc = "Vortex enabled",
+                Time = 3
+            })
+        else
+            cleanupVortex()
+            Window:Notify({
+                Title = "Part Vortex",
+                Desc = "Vortex disabled",
+                Time = 3
+            })
+        end
+        togglesound()
+    end
+})
+
+Tab:Slider({
+    Title = "Vortex Radius",
+    Desc = "Size of the vortex",
+    Min = 20,
+    Max = 200,
+    Rounding = 0,
+    Value = 90,
+    Callback = function(val)
+        vortexRadius = val
+        slidersound()
+    end
+})
+
+Tab:Slider({
+    Title = "Vortex Strength",
+    Desc = "Rotation speed of vortex",
+    Min = 1,
+    Max = 10,
+    Rounding = 0,
+    Value = 3,
+    Callback = function(val)
+        vortexStrength = val
+        slidersound()
+    end
+})
+
+Tab:Dropdown({
+    Title = "Vortex Direction",
+    List = {"Clockwise", "Counter-Clockwise"},
+    Value = "Clockwise",
+    Callback = function(direction)
+        vortexDirection = (direction == "Clockwise") and 1 or -1
+        dropdownsound()
+    end
+})
 
 Tab:Section({Title = ""})
 
