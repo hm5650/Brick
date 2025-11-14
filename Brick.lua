@@ -14,7 +14,7 @@ btnClickSound.SoundId = "rbxassetid://12221967"
 btnClickSound.Volume = 0.5
 btnClickSound.Parent = SoundService
 
-local sliderSound = Instance.new("Sound")
+local sliderSound = Instance.new("Sound")                    
 sliderSound.SoundId = "rbxassetid://12221976"
 sliderSound.Volume = 0.3
 sliderSound.Parent = SoundService
@@ -206,7 +206,6 @@ local modes = {
     "Lissajous",
     "Polygonal Orbit"
 }
-
 
 local magnetConfig = {
     BaseRadius = 10,
@@ -1716,7 +1715,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-
 local function rpp()
 
 pcall(function()
@@ -2323,15 +2321,6 @@ local Tab = Window:Tab({Title = "Orbit Mod", Icon = "circle"}) do
         end
     })
     Tab:Section({Title = ""})
-    Tab:Button({
-        Title = "Toggle Tornado",
-        Desc = "tornado? :0",
-        Callback = function()
-            tt()
-            btnclick()
-        end
-    })
-
     Tab:Button({
         Title = "PartOrbit gui",
         Desc = "woah :o",
@@ -3386,6 +3375,238 @@ local heavyWinds2Button = Tab:Button({
         end
     })
     Tab:Section({Title = ""})
+    Tab:Button({
+        Title = "Toggle Tornado",
+        Desc = "tornado? :0",
+        Callback = function()
+            tt()
+            btnclick()
+        end
+    })
+
+    Tab:Slider({
+        Title = "Set BaseRadius",
+        Min = 0,
+        Max = 1000,
+        Rounding = 0,
+        Value = 10,
+        Callback = function(val)
+            config.BaseRadius = val
+            slidersound()
+        end
+    })
+
+    Tab:Slider({
+        Title = "Set TopRadius",
+        Min = 0,
+        Max = 1000,
+        Rounding = 0,
+        Value = 40,
+        Callback = function(val)
+            config.TopRadius = val
+            slidersound()
+        end
+    })
+    Tab:Section({Title = ""})
+local partRotateEnabled = false
+local partRotateRadius = 20
+local partRotateSpeed = 2
+local partRotateHeight = 5
+local partRotateConnection = nil
+local rotatingParts = {}
+
+local function togglePartRotate()
+    partRotateEnabled = not partRotateEnabled
+    
+    if partRotateEnabled then
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local center = character.HumanoidRootPart.Position
+            local parts = workspace:GetPartBoundsInRadius(center, partRotateRadius * 2)
+            rotatingParts = {}
+            for _, part in ipairs(parts) do
+                if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(character) then
+                    local isPlayerPart = false
+                    for _, player in pairs(Players:GetPlayers()) do
+                        if part:IsDescendantOf(player.Character) then
+                            isPlayerPart = true
+                            break
+                        end
+                    end
+                    
+                    if not isPlayerPart then
+                        local partPos = part.Position
+                        local direction = (partPos - center)
+                        direction = Vector3.new(direction.X, 0, direction.Z)
+                        if direction.Magnitude > 0 then
+                            direction = direction.Unit
+                            rotatingParts[part] = {
+                                originalDistance = math.clamp((partPos - center).Magnitude, partRotateRadius * 0.5, partRotateRadius * 1.5),
+                                angle = math.atan2(direction.Z, direction.X),
+                                heightOffset = partPos.Y - center.Y,
+                                lastPosition = partPos
+                            }
+                            
+                            part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
+                            part.CanCollide = false
+                            part.Massless = true
+                        end
+                    end
+                end
+            end
+        end
+        
+        partRotateConnection = RunService.Heartbeat:Connect(function(dt)
+            if not partRotateEnabled then return end
+            
+            local character = LocalPlayer.Character
+            if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+            
+            local center = character.HumanoidRootPart.Position
+            local currentTime = tick()
+            
+            local partsToRemove = {}
+            for part, data in pairs(rotatingParts) do
+                if not part or not part.Parent then
+                    table.insert(partsToRemove, part)
+                end
+            end
+            for _, part in ipairs(partsToRemove) do
+                rotatingParts[part] = nil
+            end
+            
+            for part, data in pairs(rotatingParts) do
+                if part and part.Parent then
+                    data.angle = data.angle + (partRotateSpeed * dt)
+                    local baseRadius = data.originalDistance
+                    local radiusVariation = math.sin(currentTime * 0.5 + data.angle) * (partRotateRadius * 0.1)
+                    local currentRadius = baseRadius + radiusVariation
+                    local heightVariation = math.sin(currentTime * 0.3 + data.angle * 1.5) * partRotateHeight
+                    local targetHeight = center.Y + data.heightOffset + heightVariation
+                    local targetPos = center + Vector3.new(
+                        math.cos(data.angle) * currentRadius,
+                        targetHeight - center.Y,
+                        math.sin(data.angle) * currentRadius
+                    )
+                    local currentPos = part.Position
+                    local direction = (targetPos - currentPos)
+                    local distance = direction.Magnitude
+                    
+                    if distance > 0.1 then
+                        local force = direction.Unit * math.min(distance * 50, partRotateSpeed * 100)
+                        part.Velocity = force
+                        part.RotVelocity = Vector3.new(
+                            math.sin(data.angle) * 2,
+                            math.cos(data.angle) * 3,
+                            math.sin(data.angle * 0.5) * 1.5
+                        )
+                    end
+                    
+                    data.lastPosition = currentPos
+                end
+            end
+            
+            if #rotatingParts < 100 then -- Limit to prevent lag
+                local nearbyParts = workspace:GetPartBoundsInRadius(center, partRotateRadius * 3)
+                for _, part in ipairs(nearbyParts) do
+                    if part:IsA("BasePart") and not part.Anchored and not rotatingParts[part] and not part:IsDescendantOf(character) then
+                        local isPlayerPart = false
+                        for _, player in pairs(Players:GetPlayers()) do
+                            if part:IsDescendantOf(player.Character) then
+                                isPlayerPart = true
+                                break
+                            end
+                        end
+                        
+                        if not isPlayerPart then
+                            local partPos = part.Position
+                            local direction = (partPos - center)
+                            direction = Vector3.new(direction.X, 0, direction.Z)
+                            
+                            if direction.Magnitude > 0 then
+                                direction = direction.Unit
+                                
+                                rotatingParts[part] = {
+                                    originalDistance = math.clamp((partPos - center).Magnitude, partRotateRadius * 0.5, partRotateRadius * 1.5),
+                                    angle = math.atan2(direction.Z, direction.X),
+                                    heightOffset = partPos.Y - center.Y,
+                                    lastPosition = partPos
+                                }
+                                
+                                part.CustomPhysicalProperties = PhysicalProperties.new(0.001, 0.001, 0.001)
+                                part.CanCollide = false
+                                part.Massless = true
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        if partRotateConnection then
+            partRotateConnection:Disconnect()
+            partRotateConnection = nil
+        end
+        
+        for part, data in pairs(rotatingParts) do
+            if part and part.Parent then
+                part.CustomPhysicalProperties = nil
+                part.CanCollide = true
+                part.Massless = false
+                part.Velocity = Vector3.zero
+                part.RotVelocity = Vector3.zero
+            end
+        end
+        rotatingParts = {}
+    end
+end
+
+    Tab:Button({
+        Title = "Toggle Part Rotate",
+        Desc = "Orbit parts naturally",
+        Callback = function()
+            pcz()
+            togglePartRotate()
+            btnclick()
+        end
+    })
+    
+    Tab:Slider({
+        Title = "Set Radius",
+        Min = 5,
+        Max = 100,
+        Rounding = 0,
+        Value = 20,
+        Callback = function(val)
+            partRotateRadius = val
+            slidersound()
+        end
+    })
+    
+    Tab:Slider({
+        Title = "Set Speed",
+        Min = 1,
+        Max = 10,
+        Rounding = 0,
+        Value = 2,
+        Callback = function(val)
+            partRotateSpeed = val
+            slidersound()
+        end
+    })
+    
+    Tab:Slider({
+        Title = "Set Height",
+        Min = 0,
+        Max = 20,
+        Rounding = 0,
+        Value = 5,
+        Callback = function(val)
+            partRotateHeight = val
+            slidersound()
+        end
+    })
+
     local function erxa(part)
         if not mag[part] then
             mag[part] = {
@@ -3407,7 +3628,7 @@ local heavyWinds2Button = Tab:Button({
             mag[part] = nil
         end
     end
-
+    Tab:Section({Title = ""})
 Tab:Button({
     Title = "Part Magnet",
     Desc = "Attract or repel parts or smth",
@@ -3450,11 +3671,6 @@ Tab:Button({
                     end
                 end
             end)
-            Window:Notify({
-                Title = "Part Magnet",
-                Desc = "Part Magnet Activated - " .. magnetMode,
-                Time = 3
-            })
         else
             if magnetConnection then
                 magnetConnection:Disconnect()
@@ -3467,11 +3683,6 @@ Tab:Button({
                 end
             end
             mag = {}
-            Window:Notify({
-                Title = "Part Magnet",
-                Desc = "Part Magnet Disabled",
-                Time = 3
-            })
         end
         pcz()
         btnclick()
@@ -3490,7 +3701,6 @@ Tab:Button({
 
     Tab:Slider({
         Title = "Magnet Strength",
-        Desc = "Force of attraction/repulsion",
         Min = 10,
         Max = 500,
         Rounding = 0,
@@ -3503,7 +3713,6 @@ Tab:Button({
 
     Tab:Slider({
         Title = "Magnet Radius",
-        Desc = "Area of effect",
         Min = 10,
         Max = 100,
         Rounding = 0,
@@ -3513,7 +3722,6 @@ Tab:Button({
             slidersound()
         end
     })
-
 magnetEffectModel.Name = "MagnetEffects"
 magnetEffectModel.Parent = workspace
 local function setMagnetSimulationRadius()
@@ -3743,8 +3951,7 @@ local function launchNearbyParts()
         Time = 3
     })
 end
-
-
+Tab:Section({Title = ""})
 Tab:Toggle({
     Title = "Part Magnet2",
     Desc = "wow new cooler version :0",
@@ -3818,18 +4025,8 @@ Tab:Toggle({
         vortexEnabled = v
         if v then
             RunService.Heartbeat:Connect(updateVortex)
-            Window:Notify({
-                Title = "Part Vortex",
-                Desc = "Vortex enabled",
-                Time = 3
-            })
         else
             cleanupVortex()
-            Window:Notify({
-                Title = "Part Vortex",
-                Desc = "Vortex disabled",
-                Time = 3
-            })
         end
         togglesound()
     end
