@@ -1,3 +1,5 @@
+-- ye dis script ain't gonna update any more :l
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -41,9 +43,9 @@ local function dropdownsound()
     dropdownSound:Play()
 end
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/x2zu/OPEN-SOURCE-UI-ROBLOX/refs/heads/main/X2ZU%20UI%20ROBLOX%20OPEN%20SOURCE/DummyUi-leak-by-x2zu/fetching-main/Tools/Framework.luau"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/hm5650/DummyUi/refs/heads/main/DummyUI.lua"))()
 local Window = Library:Window({
-    Title = "Brick",
+    Title = "Brick.cc",
     Desc = "I'm bricking it, I'm bricking it",
     Icon = 127155823074936,
     Theme = "Dark",
@@ -5290,7 +5292,7 @@ end
 
 Window:Notify({
     Title = "script made by @hmmm5651",
-    Desc = "Enter Text... (ಠ⁠ ͜⁠ʖ⁠ ⁠ಠ)",
+    Desc = "Enter Text... (ಠ⁠ ͜⁠ʖ⁠ ⁠ಠ)",
     Time = 5
 })
 pcz()
