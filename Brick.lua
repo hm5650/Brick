@@ -1,5 +1,3 @@
--- ye dis script ain't gonna update any more :l
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -46,7 +44,7 @@ end
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/hm5650/DummyUi/refs/heads/main/DummyUI.lua"))()
 local Window = Library:Window({
     Title = "Brick.cc",
-    Desc = "I'm bricking it, I'm bricking it",
+    Desc = "I'm bricking it, I'm bricking it... im bricked",
     Icon = 127155823074936,
     Theme = "Dark",
     Config = {
@@ -146,6 +144,7 @@ local blackHoleParts = {}
 local windsEnabled = false
 local gravityEnabled = false
 local magnetEnabled = false
+local ggp2 = 1
 
 local PartAttachTool = {
     Tool = nil,
@@ -279,7 +278,7 @@ function pcz()
         
         local parts = workspace:GetPartBoundsInRadius(center, getpart)
         local partsProcessed = 0
-        local maxInitialParts = 40
+        local maxInitialParts = 50
         
         for i, part in ipairs(parts) do
             if partsProcessed >= maxInitialParts then
@@ -470,6 +469,21 @@ function pcz()
     end)
 end
 
+function pc2()
+    local plr = game.Players.LocalPlayer
+    task.spawn(function()
+        while true do
+            pcall(function()
+                plr.ReplicationFocus = workspace
+                plr.MaximumSimulationRadius = math.huge
+                plr.SimulationRadius = ggp2
+            end)
+            task.wait(0.1)
+        end
+    end)
+end
+
+
 Window:Notify({
     Title = "Brick",
     Desc = "PartClaim Enabled",
@@ -485,12 +499,12 @@ getgenv().isnetworkowner = newcclosure(function(part)
   return (part.ReceiveAge == 0 and gethiddenproperty(part, "NetworkIsSleeping") == false)
 end)
 
-game.Players.LocalPlayer.SimulationRadius = math.huge
+game.Players.LocalPlayer.SimulationRadius = getpart
 game.Players.LocalPlayer.SimulationRadiusChanged:Connect(function()
   game.Players.LocalPlayer.ReplicationFocus = workspace
-  sethiddenproperty(game.Players.LocalPlayer, "SimulationRadius", math.huge)
-  sethiddenproperty(game.Players.LocalPlayer, "MaxSimulationRadius", math.huge)
-  sethiddenproperty(game.Players.LocalPlayer, "MaximumSimulationRadius", math.huge)
+  sethiddenproperty(game.Players.LocalPlayer, "SimulationRadius", getpart)
+  sethiddenproperty(game.Players.LocalPlayer, "MaxSimulationRadius", getpart)
+  sethiddenproperty(game.Players.LocalPlayer, "MaximumSimulationRadius", getpart)
 end)
 
 game:GetService("RunService").PreSimulation:Connect(function()
@@ -605,6 +619,14 @@ local Tab = Window:Tab({Title = "PartClaim", Icon = "folder"}) do
                 sethiddenproperty(player, "MaxSimulationRadius", getpart)
             end)
             slidersound()
+        end
+    })
+    Tab:Button({
+        Title = "Clear Partclaim",
+        Desc = nil,
+        Callback = function()
+            ggp2()
+            btnclick()
         end
     })
 end
@@ -2721,6 +2743,15 @@ local Tab = Window:Tab({Title = "Black Hole", Icon = "sun"}) do
                 blackHoleSphere.Size = Vector3.new(val / 2.5, val / 2.5, val / 2.5)
             end
             slidersound()
+        end
+    })
+
+    Tab:Button({
+        Title = "BringParts GUI",
+        Desc = "",
+        Callback = function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/hm5650/BringParts/refs/heads/main/BringParts.lua"))()
+            btnclick()
         end
     })
 
@@ -5292,7 +5323,7 @@ end
 
 Window:Notify({
     Title = "script made by @hmmm5651",
-    Desc = "Enter Text... (ಠ⁠ ͜⁠ʖ⁠ ⁠ಠ)",
+    Desc = "Enter Text... (ಠ⁠ ͜⁠ʖ⁠ ⁠ಠ)",
     Time = 5
 })
 pcz()
